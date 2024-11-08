@@ -373,7 +373,6 @@ impl Parser {
                     }
                     chars.next(); // Skip '['
                     let link_text: String = chars.by_ref().take_while(|&ch| ch != ']').collect();
-                    chars.next(); // Skip ']'
                     if chars.next() == Some('(') {
                         let url: String = chars.by_ref().take_while(|&ch| ch != ')').collect();
                         chars.next(); // Skip ')'

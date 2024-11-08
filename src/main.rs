@@ -17,7 +17,7 @@ My Article Title
 
 Welcome to my blog post. This is a _simple_ example of **strong** text and `code`.
 Another sentence in the same paragraph with inline math: $y = mx + b$.
-Here is a [link with **formatted** _text_](https://example.com).
+Here is a [link](https://purplepuppy.com) and a [link with **formatted** _text_](https://example.com).
 
 ???
 This is a raw block. It will be copied as is.
