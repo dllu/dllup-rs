@@ -28,12 +28,23 @@ pub enum Block {
         url: String,
         id: Option<String>,
         id_number: usize,
+        alt: String,
         text: Vec<InlineElement>,
     },
     DisplayMath {
         id: Option<String>,
         id_number: usize,
         content: String,
+    },
+    Table {
+        id_number: usize,
+        header: Vec<Vec<InlineElement>>,    // list of header cells
+        rows: Vec<Vec<Vec<InlineElement>>>, // list of rows, each row is list of cells
+        caption: Vec<InlineElement>,
+    },
+    BigButton {
+        text: Vec<InlineElement>,
+        url: String,
     },
     UnorderedList(Vec<ListItem>),
     OrderedList(Vec<ListItem>),
@@ -51,9 +62,15 @@ pub enum InlineElement {
     Text(String),
     Code(String),
     InlineMath(String),
-    Link { text: Vec<InlineElement>, url: String },
+    Link {
+        text: Vec<InlineElement>,
+        url: String,
+    },
     Emphasis(Vec<InlineElement>),
     Strong(Vec<InlineElement>),
     Reference(String),
-    ReferenceAnchor { content: String, invisible: bool },
+    ReferenceAnchor {
+        content: String,
+        invisible: bool,
+    },
 }
