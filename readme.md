@@ -6,20 +6,31 @@ a simple markup language for personal blog
 
 * has first class support for math equations that get rendered to svg images. your static webpage won't jump around as stuff are rendering/drawing.
 
-## Math rendering
+## Configuration
 
-Math is rendered to inline HTML (e.g., KaTeX output) and inlined directly in the document.
+Run the binary with `dllup-rs <input.dllu> [config.toml]`. If a config path is not provided, the tool looks for `dllup.toml` next to the input file. Missing config files fall back to built-in defaults.
 
-- External command engine (recommended):
-  - Set `DLLUP_KATEX_CMD` (or `DLLUP_MATH_CMD`) to a command that prints rendered HTML to stdout.
-  - The command receives a flag for mode and the TeX string as the final argument:
-    - `--inline` for inline math
-    - `--display` for display math
-    - The TeX string is passed as the final argument (with a leading space to avoid being parsed as an option if it begins with `-`).
-  - Example: `DLLUP_KATEX_CMD='deno run -A ./deno/katex_render.ts'`
+All settings live inside the TOML file. Available keys:
 
-- Fallback:
-  - If no command is configured or rendering fails, the raw TeX is shown inside `<span class="math-inline">` or `<div class="math-display">`.
+```toml
+# Enable timing output on stderr
+timings = false
+
+# Base URL used for site-relative links like "/post.html"
+root_url = "https://example.com"
+
+[math]
+# Try to spawn the persistent Node.js-based KaTeX helper before other options
+prefer_persistent = false
+
+# External command used to render math when present. The command should read
+# TeX from stdin and write HTML to stdout, matching KaTeX CLI behaviour.
+command = "npx katex"
+```
+
+Math is rendered to inline HTML (KaTeX-compatible). When `math.command` is set the tool will run it, otherwise it first tries to spawn the bundled persistent KaTeX helper and falls back to `npx katex`. If every option fails, the raw TeX is emitted inside `<span class="math-inline">` or `<div class="math-display">` elements.
+
+When `root_url` is configured, any link or image whose URL starts with `/` is prefixed with that root (e.g., `/foo.html` becomes `https://example.com/foo.html`).
 * supports cross references references and tables
 * html5 semantic figure and figcaption for images
 * implemented in rust for some reason

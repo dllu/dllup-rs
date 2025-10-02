@@ -1,37 +1,40 @@
 use crate::ast::*;
+use crate::config;
 use crate::math_engine::{ExternalCmdEngine, MathEngine};
 use inkjet::formatter::ThemedHtml;
 use inkjet::theme::vendored::ONEDARKER;
 use inkjet::theme::Theme;
 use inkjet::{Highlighter, Language};
 use regex::Regex;
-use std::env;
+use std::borrow::Cow;
 use std::fs;
 
 pub struct HtmlRenderer {
     engine: Option<Box<dyn MathEngine>>, // external command or none
     memo_math: std::collections::HashMap<(bool, String), String>,
+    config: config::Config,
 }
 
 impl HtmlRenderer {
-    pub fn new() -> Self {
+    pub fn new(config: &config::Config) -> Self {
         Self {
-            engine: Self::make_engine_from_env(),
+            engine: Self::make_engine_from_config(config),
             memo_math: std::collections::HashMap::new(),
+            config: config.clone(),
         }
     }
 
-    fn make_engine_from_env() -> Option<Box<dyn MathEngine>> {
+    fn make_engine_from_config(config: &config::Config) -> Option<Box<dyn MathEngine>> {
         // Prefer V8 engine if built-in feature is enabled
         // Prefer persistent katex node process if available
-        if env::var("DLLUP_PERSISTENT_KATEX").ok().as_deref() == Some("1") {
+        if config.math.prefer_persistent {
             match crate::math_engine::PersistentKatexEngine::spawn() {
                 Ok(engine) => return Some(Box::new(engine)),
                 Err(e) => eprintln!("Failed to spawn persistent KaTeX: {}. Falling back.", e),
             }
         }
-        if let Ok(s) = env::var("DLLUP_KATEX_CMD").or_else(|_| env::var("DLLUP_MATH_CMD")) {
-            let parts = shell_words::split(&s).unwrap_or_else(|_| vec![s]);
+        if let Some(command) = &config.math.command {
+            let parts = shell_words::split(command).unwrap_or_else(|_| vec![command.clone()]);
             return Some(Box::new(ExternalCmdEngine { cmd: parts }));
         }
         // Default to persistent node engine; if that fails, fallback to npx katex
@@ -107,11 +110,8 @@ impl HtmlRenderer {
             } => self.render_table(*id_number, header, rows, caption),
             Block::BigButton { text, url } => {
                 let inner = self.render_inlines(text);
-                format!(
-                    "<p><a href=\"{}\" class=\"bigbutton\">{}</a></p>\n",
-                    escape_html(url),
-                    inner
-                )
+                let href = self.escape_url(url);
+                format!("<p><a href=\"{}\" class=\"bigbutton\">{}</a></p>\n", href, inner)
             }
         }
     }
@@ -161,11 +161,13 @@ impl HtmlRenderer {
         let caption_html = self.render_inlines(text);
         let alt_text = alt.to_string();
 
+        let href = self.escape_url(url);
+        let src = self.escape_url(url);
         format!(
             "<figure id=\"{}\"><a href=\"{}\"><img src=\"{}\" alt=\"{}\"/></a><figcaption><a href=\"#{}\" class=\"fignum\">FIGURE {}</a> {}</figcaption></figure>\n",
             fig_id_attr,
-            escape_html(url),
-            escape_html(url),
+            href,
+            src,
             escape_html(&alt_text),
             fig_id_attr,
             fig_id_num,
@@ -268,7 +270,8 @@ impl HtmlRenderer {
             InlineElement::InlineMath(math) => self.render_math_html(math, true),
             InlineElement::Link { text, url } => {
                 let inner = self.render_inlines(text);
-                format!("<a href=\"{}\">{}</a>", escape_html(url), inner)
+                let href = self.escape_url(url);
+                format!("<a href=\"{}\">{}</a>", href, inner)
             }
             InlineElement::Emphasis(content) => {
                 let inner = self.render_inlines(content);
@@ -323,6 +326,24 @@ impl HtmlRenderer {
             let s = format!("<div class=\"math-display\">{}</div>", escape_html(latex));
             self.memo_math.insert((inline, wrapped), s.clone());
             s
+        }
+    }
+
+    fn escape_url(&self, url: &str) -> String {
+        let resolved = self.url_with_root(url);
+        escape_html(&resolved)
+    }
+
+    fn url_with_root<'a>(&self, url: &'a str) -> Cow<'a, str> {
+        match self.config.root_url.as_deref() {
+            Some(root) if url.starts_with('/') && !url.starts_with("//") => {
+                if root == "/" {
+                    Cow::Borrowed(url)
+                } else {
+                    Cow::Owned(format!("{}{}", root, url))
+                }
+            }
+            _ => Cow::Borrowed(url),
         }
     }
 }
@@ -517,7 +538,11 @@ mod tests {
 
     #[test]
     fn fallback_inline_math() {
-        let mut r = HtmlRenderer { engine: None };
+        let mut r = HtmlRenderer {
+            engine: None,
+            memo_math: std::collections::HashMap::new(),
+            config: crate::config::Config::default(),
+        };
         let html = r.render_paragraph(&[
             InlineElement::Text("A ".into()),
             InlineElement::InlineMath("x+y".into()),
@@ -528,7 +553,11 @@ mod tests {
 
     #[test]
     fn render_figure_alt_and_caption() {
-        let mut r = HtmlRenderer { engine: None };
+        let mut r = HtmlRenderer {
+            engine: None,
+            memo_math: std::collections::HashMap::new(),
+            config: crate::config::Config::default(),
+        };
         let caption = vec![
             InlineElement::Text("An ".into()),
             InlineElement::Emphasis(vec![InlineElement::Text("example".into())]),
@@ -536,5 +565,21 @@ mod tests {
         let html = r.render_image_figure("/img.png", None, 0, "An example", &caption);
         assert!(html.contains("FIGURE 1"));
         assert!(html.contains("alt=\"An example\""));
+    }
+
+    #[test]
+    fn root_url_prefixes_internal_links() {
+        let mut cfg = crate::config::Config::default();
+        cfg.root_url = Some("https://example.com".into());
+        let mut r = HtmlRenderer {
+            engine: None,
+            memo_math: std::collections::HashMap::new(),
+            config: cfg,
+        };
+        let html = r.render_inlines(&[InlineElement::Link {
+            text: vec![InlineElement::Text("link".into())],
+            url: "/foo.html".into(),
+        }]);
+        assert!(html.contains("href=\"https://example.com/foo.html\""));
     }
 }

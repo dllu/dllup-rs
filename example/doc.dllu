@@ -1,0 +1,419 @@
+dllup markup language
+
+2015-03-12
+
+===
+
+# Introduction
+
+**dllup** is a [lightweight markup language](https://en.wikipedia.org/wiki/Lightweight_markup_language) designed for creating simple websites. It is a way to write an easily readable text file which the dllup parser turns into a static HTML page, or a LaTeX document. This document will cover the use of dllup to produce HTML webpages.
+
+The name "dllup" is a portmanteau of my username and "markup". It was inspired by [jemdoc](http://jemdoc.jaboc.net/) and [markdown](http://daringfireball.net/projects/markdown/). It supports LaTeX equations, tables, figure captioning,  syntax highlighting of source code, and automatic section numbering with table of contents. However, it lacks many other features as it is deliberately simple.
+
+## Philosophy
+
+* The raw text file must be fast to type up.
+* The output must be semantically correct HTML5 and be parseable by text-only browsers like [Lynx](https://en.wikipedia.org/wiki/Lynx_%28web_browser%29) and accessibility tools. Users can apply whatever CSS styles as they wish.
+* In descending order of importance: it should be _simple_, _consistent_, _correct_. Compare with the ["worse is better" approach](http://en.wikipedia.org/wiki/Worse_is_better).
+
+## Comparison to other languages
+
+Why make [yet another markup language](http://xkcd.com/927/) when there are already so many available? The answer is:
+
+1. Just for fun.
+2. I want several features not available in current markup languages, and I don't need several features which are available in current markup languages.
+
+Thus, this project is for my own personal use. That notwithstanding, here are comparisons to jemdoc and Markdown.
+
+### Comparison to Markdown
+
+There are several differences:
+
+* **dllup is much stricter**. Markdown is designed to support a large variety of ways to format things in a text file. For example, an `<h1>` can be formatted in over three ways (prefix, both prefix and suffix, and "underline" of equal signs). In dllup, everything is done one way only. This is because I wrote my language with the intention of having only one user (myself), and I tend to prefer doing things consistently. 
+* **dllup supports math equations**. Many attempts exist to bolt on [MathJax](http://www.mathjax.org) support to Markdown (see: [MathJax in use](http://docs.mathjax.org/en/latest/misc/mathjax-in-use.html)). I have made the decision instead to render math as SVG on the serverside. 
+There are pros and cons: the good thing is that this avoids the lengthy render time of MathJax, allows repeated equations to be cached, and works on browsers without Javascript. The bad thing is that it takes a bit more bandwidth to send a large SVG file (a few kB per equation) and there is no subpixel hinting.
+* **dllup supports captioned figures**. Markdown only supports inline images, although it is possible to give it a kind of caption. dllup uses semantically correct HTML5 tags `<figure>` and `<figcaption>` instead.
+* **dllup does not implement several features**, such as integration with publishing platforms (Markdown supports Movable Type), and things like automatic links, and so on.
+
+There are also several similarities: the syntax for headers, links, lists, numbered lists, emphasis, and strong text are also valid Markdown. So, if you take a simple dllup document and put it into a markdown parser, there is a good chance it will be parsed correctly. The converse is not true in general.
+
+### Comparison to Jemdoc
+
+There are several differences:
+
+* **dllup equations are SVG**. The equations in jemdoc were originally rasterized PNG images which wastes bandwidth, and looks horrible on retina screens, in print, or when zoomed in. But it should be noted there is a version of jemdoc which uses MathJax instead, with the same pros and cons as described in the previous section.
+* **dllup supports captioned figures**. While jemdoc supports image blocks, it does not directly support the semantically correct `<figure>` caption since it targets XHTML 1.1 instead of HTML5.
+* **dllup does not implement several features**. This includes other character sets, and so on. There are also no bibliographic reference packages for dllup.
+* **dllup is not as portable**, as it requires external software to handle SVG equations.
+
+There is a key similarity: the goal of maintaining personal webpages, especially in an academic setting, is identical.
+
+# Syntax
+
+## Article header
+
+If the document contains a line consisting of three equal signs, then everything before it will be considered the **header**. The first line of the header is the document title, and subsequent paragraphs (separated by an empty line) will show up as paragraphs. These paragraphs can be used for useful meta-data (such as the date of creation, tags, and so forth), but should not be used for actual content.
+
+Everything after the three equal signs will be body text, explained in the following sections.
+
+~~~~
+ dllup markup language
+
+ ===
+
+ # Introduction
+ 
+ **dllup** is a lightweight markup language...
+~~~~
+
+## Code
+
+### Raw HTML
+
+Separate raw HTML code from the rest of the document by lines consisting of _only_ three question marks (no whitespace).
+
+~~~~
+ Blah blah.
+
+ ???
+ <script>
+ window.alert('hi');
+ </script>
+ ???
+
+ Blah blah blah.
+~~~~
+
+### Code blocks
+
+A code block is separated from the rest of the document by lines consisting of _only_ three or four tildes (no whitespace). Three tildes means the content will get syntax highlighted (automatic guess for syntax, unless the first line specifies the language by the word "lang" followed by the language name), and four tildes means the content wil not get syntax highlighted.
+
+~~~~
+ Blah blah.
+
+ ~~~
+ lang c++
+ #include <iostream>
+ int main() {
+     std::cout << "Hello world!" << endl;
+ }
+ ~~~
+
+ Blah blah blah.
+~~~~
+
+For example,
+
+~~~
+lang c++
+#include <iostream>
+int main() {
+    std::cout << "Hello world!" << endl;
+}
+~~~
+
+## Block elements
+
+All block elements are separated by at least one empty line. For example there must be an empty line between a header and the paragraph that follows it. This behaviour is similar to LaTeX and allows you to use hard wraps (i.e. line breaks) to enforce a maximum line length.
+
+### Section headers
+
+Headers are specified by preceding octothorpes, up to six. These will show up in the Table of Contents, which appears in the article header. Using more than three levels of section headers is not recommended.
+
+~~~~
+# This is a first level header
+
+## This is a second level header
+
+### This is a third level header
+that is very, very long
+
+###### This is a sixth level header
+~~~~
+
+### Blockquotes
+
+Blockquotes are preceded by a greater than symbol.
+
+~~~~
+> The quick brown fox jumps over the lazy dog and
+also jumps over the lazy cat.
+~~~~
+
+This gets rendered as:
+
+> The quick brown fox jumps over the lazy dog and
+also jumps over the lazy cat.
+
+### Images
+
+Images are captioned figures by default and consist of the word "pic", the URL, the alt tag, a colon with spaces on either side, and the caption. All fields are required. You can put multiple images in the same block, one on each line.
+
+~~~~
+pic http://i.imgur.com/WpEUM8S.jpg Ghost, a novelty chess set : _Ghost_ is a novelty chess set I designed which looks cool but is totally impractical for playing. The pieces are very flat and can be stacked together for compact storage.
+~~~~
+
+This gets rendered as:
+
+pic http://i.imgur.com/WpEUM8S.jpg Ghost, a novelty chess set : _Ghost_ is a novelty chess set I designed which looks cool but is totally impractical for playing. The pieces are very flat and can be stacked together for compact storage.
+
+### Display math equations
+
+Display math equations are preceded by a dollar sign.
+
+~~~~
+$ x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
+~~~~
+
+This gets rendered as:
+
+$ x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
+
+### Lists
+
+Lists are preceded by an asterisk or a number followed by a dot.
+
+~~~~
+* Item one.
+* Item two.
+Multi-line list item.
+** Nested.
+*** More nested.
+** Nested.
+* Item 3.
+
+1. Item one
+99. Item ninety-nine? Nah it's actually item two.
+~~~~
+
+This gets rendered as:
+
+* Item one.
+* Item two.
+Multi-line list item.
+** Nested.
+*** More nested.
+** Nested.
+* Item 3.
+
+1. Item one
+99. Item ninety-nine? Nah it's actually item two.
+
+Nesting is supported only for unordered lists, but not for ordered ones. The first number of a numbered list must be 1, although for the remaining list items any number works.
+
+### Tables
+
+Tables consist of rows where columns are separated by the vertical pipe.
+
+~~~~
+| Puppy colour | Awesome? | Purpleness |
+| ------------ | -------- | ---------- |
+| Red          | $\times$ | 0.1        |
+| Orange       | $\times$ | 0          |
+| Yellow       | $\times$ | 0          |
+| Green        | $\times$ | 0          |
+| Blue         | $\times$ | 0.5        |
+| Purple       | $\checkmark$ | 1      |
+Summary of the awesomeness of puppy colours.
+~~~~
+
+This gets rendered as:
+
+| Puppy colour | Awesome? | Purpleness |
+| ------------ | -------- | ---------- |
+| Red          | $\times$ | 0.1        |
+| Orange       | $\times$ | 0          |
+| Yellow       | $\times$ | 0          |
+| Green        | $\times$ | 0          |
+| Blue         | $\times$ | 0.5        |
+| Purple       | $\checkmark$ | 1      |
+Summary of the awesomeness of puppy colours.
+
+The first line is always interpreted as a header. A row consisting of only `|`, `-`, and whitespace is ignored. The vertical pipes don't need to line up and extra whitespace is discarded. The last line is always interpreted as a table caption.
+
+### Big button
+
+A big button is useful in case you want to link to an important page, or a link to download something, or to perform a critical action.
+
+~~~~
+:: big button http://www.dllu.net/
+~~~~
+
+This gets rendered as:
+
+:: big button http://www.dllu.net/
+
+### Paragraph
+
+A block with none of the keywords/symbols in front counts as just a paragraph.
+
+## Inline elements
+
+Inline elements, or _span_ elements, apply to any kind of normal text such as paragraph text, header text, caption text, list content, and so on. But they do not apply to math equations or source code. Here are the types of elements processed in order of precedence.
+
+### Monospace code snippet
+
+A `monospace code snippet` comes between backticks.
+
+~~~~
+A `monospace code snippet` comes between backticks.
+~~~~
+
+### Inline math
+
+Inline mathematics $y = mx + b$ comes between dollar signs.
+
+~~~~
+Inline mathematics $y = mx + b$ comes between dollar signs.
+~~~~
+
+### Links
+
+Links follow [the Markdown syntax](http://daringfireball.net/projects/markdown/basics).
+
+~~~~
+Links follow [the Markdown syntax](http://daringfireball.net/projects/markdown/basics).
+~~~~
+
+### Emphasis and strong
+
+Text is _emphasized_ or made **strong** by underscores and double asterisks.
+
+~~~~
+Text is _emphasized_ or made **strong** by underscores and double asterisks.
+~~~~
+
+### References
+
+Referring to or citing things is done using `(#asdf)`, for example (#fig1)(#eq1)(#s2.4.5)(#asdf). A reference list is similar to a regular unordered list, except each element starts with  `* [#asdf]`, like this:
+
+* [#asdf] Lu, Daniel. "dllup markup language".
+
+~~~~
+Referring to or citing things is done using `(#asdf)`, for example (#fig1)(#eq1)(#s2.4.5)(#asdf). A reference can be created as `* [#asdf]`, like this:
+
+* [#asdf] Lu, Daniel. "dllup markup language".
+~~~~
+
+## Typographical character substitutions
+
+dllup makes automatic substitutions:
+
+* Real quotation marks that look like "66" and "99" instead of straight quotation marks.
+* Real single quotation marks and apostrophes that look like '6' and '9'.
+* Dashes --- em dashes for breaking sentences, and en dashes for ranges like A--Z.
+* Ellipses...
+
+### Special character escaping
+
+You can escape special characters using backslashes.
+
+The dollar sign "\$", backtick "\`", for example, should be escaped as `\$` and `\`` respectively if you wish to use them in prose.
+
+# Implementation
+
+dllup is implemented in [Python 3](https://www.python.org/). It is fewer than 250 lines of Python, most of which are one-line functions (compare with Markdown which is 1400 lines of Perl and jemdoc which is 1400 lines of Python).
+
+The Python code aims to be concise and does not contain html information about the header and footer of the document.
+
+For rendering math equations, dllup uses [mathjax-node-cli](https://github.com/mathjax/mathjax-node-cli) to create SVG files.
+
+For syntax highlighting, dllup uses [Pygments](http://pygments.org/). 
+
+The source code of dllup is available on [GitHub](https://github.com/dllu/dllup) under the MIT license.
+
+# Installation
+
+## dllup to html
+
+Using dllup is straightforward, but it is not as portable as jemdoc and not as polished. As such it will not check for dependencies and will simply crash if you do not set up your system exactly as described.
+
+The parser is a single Python script that you can download here:
+
+:: Download dllup https://github.com/dllu/dllup/blob/main/dllup.py
+
+* Install [Pygments](http://pygments.org/)
+* Install [mathjax-node-cli](https://www.npmjs.com/package/mathjax-node-cli)
+
+### Compiling a single file
+
+To run, `dllup.py` does input and output on standard IO. By default it creates svg files for equations in a folder `site/texcache`. 
+
+~~~~
+mkdir site/texcache
+./dllup.py < site/index.dllu > site/index.html
+~~~~
+
+In Python you can also import dllup as a module:
+
+~~~
+lang python
+#!/usr/bin/python
+
+import dllup
+
+s = """Example
+
+===
+
+# Hi
+
+The quick brown fox jumps over the lazy dog."""
+
+print(dllup.parse(s))
+~~~
+
+## dllup to LaTeX
+
+All you need is a working LaTeX installation and the following Python 3 script.
+
+:: Download dlluptex https://github.com/dllu/dllup/blob/main/dlluptex.py
+
+The output can be included in any LaTeX document, like so
+
+~~~
+lang tex
+\begin{document}
+\input{index_dllu.tex}
+\end{document}
+~~~
+
+I recommend my own [LaTeX headers and template](https://github.com/dllu/dllup/blob/main/texheader.tex). For example, see [this documentation page rendered in LaTeX (pdf)](index.pdf) and the [raw .tex output](index_dllu.tex).
+
+### Compiling a single file
+
+Usage is the same as for html, but easier.
+
+~~~~
+./dlluptex.py < index.dllu > index_dllu.tex
+pdflatex texheader.tex
+pdflatex texheader.tex
+~~~~
+
+## Syntax highlighting
+
+There is experimental syntax highlighting support for vim.
+
+pic gdTcORo.png vim syntax highlighting example : Syntax highlighting example in vim.
+
+It is modified from the Markdown vim syntax file maintained by Tim Pope.
+
+:: Download vim syntax https://github.com/dllu/dllup/blob/main/dllup.vim
+
+# FAQ
+
+> Certain features don't work in my browser.
+
+The output of dllup has been W3C validated and tested in the latest versions of Firefox, Google Chrome, and even [Lynx](https://en.wikipedia.org/wiki/Lynx_%28web_browser%29). No attempt shall be made to support other browsers, although you are free to extend dllup as you please.
+
+> Why SVG math instead of MathJax or KaTeX?
+
+MathJax is slow, causes page content to jump around as math is being rendered, and may freeze the browser on old hardware or slow browsers. KaTeX does not support critical math entities such as matrices. Saving math equations as SVG files also allows the SVG files to be cached in case a single equation shows up many times. Some users also prefer to disable Javascript for privacy reasons even when they are using a modern browser that supports SVG images.
+
+> Where can I find an example of a dllup file?
+
+This [documentation itself was written in dllup](index.dllu).
+
+> The parser crashed.
+
+This can be due to a syntax error in the input. The dllup markup language is stricter than Markdown and has some syntax that is not obvious to people other than myself.
