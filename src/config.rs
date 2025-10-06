@@ -2,36 +2,34 @@ use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 #[serde(default)]
 pub struct Config {
     pub timings: bool,
     pub root_url: Option<String>,
     pub math: MathConfig,
+    pub html: HtmlConfig,
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            timings: false,
-            root_url: None,
-            math: MathConfig::default(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 #[serde(default)]
 pub struct MathConfig {
     pub prefer_persistent: bool,
     pub command: Option<String>,
 }
 
-impl Default for MathConfig {
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct HtmlConfig {
+    pub template_path: String,
+    pub css_href: String,
+}
+
+impl Default for HtmlConfig {
     fn default() -> Self {
         Self {
-            prefer_persistent: false,
-            command: None,
+            template_path: "static/template.html".into(),
+            css_href: "static/styles.css".into(),
         }
     }
 }

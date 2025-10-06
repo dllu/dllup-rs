@@ -23,7 +23,7 @@ fn main() {
     let input_path = Path::new(&args[1]);
     let config_path = args
         .get(2)
-        .map(|s| PathBuf::from(s))
+        .map(PathBuf::from)
         .unwrap_or_else(|| config::default_config_path(input_path));
 
     let config = if args.len() == 3 {
@@ -70,7 +70,15 @@ fn main() {
         .map(|h| h.title.as_str())
         .unwrap_or("Document");
     let t2 = Instant::now();
-    let html = html_renderer::wrap_html_document(title, &body);
+    let toc_html = renderer.table_of_contents_html();
+    let toc_str = toc_html.as_deref().unwrap_or("");
+    let html = match html_renderer::wrap_html_document(&config, title, &body, toc_str) {
+        Ok(html) => html,
+        Err(e) => {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    };
     let t_wrap = t2.elapsed();
 
     let out_path = input_path.with_extension("html");

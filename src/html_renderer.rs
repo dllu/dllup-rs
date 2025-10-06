@@ -13,6 +13,16 @@ pub struct HtmlRenderer {
     engine: Option<Box<dyn MathEngine>>, // external command or none
     memo_math: std::collections::HashMap<(bool, String), String>,
     config: config::Config,
+    toc: Vec<TocEntry>,
+    section_counters: Vec<usize>,
+}
+
+#[derive(Debug, Clone)]
+struct TocEntry {
+    level: usize,
+    title: String,
+    numbering_label: String,
+    anchor_id: String,
 }
 
 impl HtmlRenderer {
@@ -21,6 +31,8 @@ impl HtmlRenderer {
             engine: Self::make_engine_from_config(config),
             memo_math: std::collections::HashMap::new(),
             config: config.clone(),
+            toc: Vec::new(),
+            section_counters: Vec::new(),
         }
     }
 
@@ -47,6 +59,8 @@ impl HtmlRenderer {
     }
 
     pub fn render(&mut self, article: &Article) -> String {
+        self.toc.clear();
+        self.section_counters.clear();
         let mut html = String::new();
 
         if let Some(header) = &article.header {
@@ -58,6 +72,39 @@ impl HtmlRenderer {
         }
 
         html
+    }
+
+    pub fn table_of_contents_html(&self) -> Option<String> {
+        if self.toc.is_empty() {
+            return None;
+        }
+
+        let mut html = String::from("<div class=\"toc\">");
+        let mut current_level = 0usize;
+
+        for entry in &self.toc {
+            let level = entry.level;
+            if level > current_level {
+                for _ in current_level..level {
+                    html.push_str("<ol>");
+                }
+            } else {
+                html.push_str("</li>");
+                for _ in level..current_level {
+                    html.push_str("</ol></li>");
+                }
+            }
+            html.push_str("<li>");
+            html.push_str(&toc_link(entry));
+            current_level = level;
+        }
+
+        for _ in 0..current_level {
+            html.push_str("</li></ol>");
+        }
+
+        html.push_str("</div>");
+        Some(html)
     }
 
     fn render_header(&self, header: &ArticleHeader) -> String {
@@ -111,7 +158,10 @@ impl HtmlRenderer {
             Block::BigButton { text, url } => {
                 let inner = self.render_inlines(text);
                 let href = self.escape_url(url);
-                format!("<p><a href=\"{}\" class=\"bigbutton\">{}</a></p>\n", href, inner)
+                format!(
+                    "<p><a href=\"{}\" class=\"bigbutton\">{}</a></p>\n",
+                    href, inner
+                )
             }
         }
     }
@@ -133,16 +183,42 @@ impl HtmlRenderer {
         }
     }
 
-    fn render_section_header(&self, level: usize, id: &str, text: &str) -> String {
+    fn render_section_header(&mut self, level: usize, id: &str, text: &str) -> String {
         let level = std::cmp::min(level, 6);
         let tag = format!("h{}", level);
+        let anchor_id = self.register_section(level, text);
         format!(
-            "<{} id=\"{}\"><span>{}</span></{}>\n",
+            "<{} id=\"{}\"><span id=\"{}\">{}</span></{}>\n",
             tag,
             escape_html(id),
+            escape_html(&anchor_id),
             escape_html(text),
             tag
         )
+    }
+
+    fn register_section(&mut self, level: usize, text: &str) -> String {
+        let level = level.clamp(1, 6);
+        if self.section_counters.len() < level {
+            self.section_counters.resize(level, 0);
+        }
+        self.section_counters[level - 1] += 1;
+        for idx in level..self.section_counters.len() {
+            self.section_counters[idx] = 0;
+        }
+        let numbering_label = self.section_counters[..level]
+            .iter()
+            .map(|n| n.to_string())
+            .collect::<Vec<_>>()
+            .join(".");
+        let anchor_id = format!("s{}", numbering_label);
+        self.toc.push(TocEntry {
+            level,
+            title: text.to_string(),
+            numbering_label: numbering_label.clone(),
+            anchor_id: anchor_id.clone(),
+        });
+        anchor_id
     }
 
     fn render_image_figure(
@@ -155,7 +231,7 @@ impl HtmlRenderer {
     ) -> String {
         let fig_id_num = id_number + 1;
         let fig_id_attr = id
-            .map(|s| escape_html(s))
+            .map(escape_html)
             .unwrap_or_else(|| format!("fig{}", fig_id_num));
 
         let caption_html = self.render_inlines(text);
@@ -178,7 +254,7 @@ impl HtmlRenderer {
     fn render_display_math(&mut self, id: Option<&str>, id_number: usize, content: &str) -> String {
         let eqnum = id_number + 1;
         let eq_id_attr = id
-            .map(|s| escape_html(s))
+            .map(escape_html)
             .unwrap_or_else(|| format!("eq{}", eqnum));
 
         let html = self.render_math_html(content, false);
@@ -350,6 +426,16 @@ impl HtmlRenderer {
 
 // removed SVG metric extraction: KaTeX HTML is inlined directly
 
+fn toc_link(entry: &TocEntry) -> String {
+    let href = format!("#{}", entry.anchor_id);
+    format!(
+        "<a href=\"{}\"><span class=\"tocnum\">{}</span> <span>{}</span></a>",
+        html_escape_attr(&href),
+        html_escape_attr(&entry.numbering_label),
+        escape_html(&entry.title)
+    )
+}
+
 fn extract_text(elements: &[InlineElement]) -> String {
     let mut out = String::new();
     for el in elements {
@@ -392,14 +478,16 @@ fn needs_space_between(prev: &str, next: &str) -> bool {
     let next_first = next.chars().find(|c| !c.is_whitespace()).unwrap_or(' ');
     // Insert space when HTML tag boundary meets a word character
     let punct = [',', '.', ';', ':', '?', '!', ')', ']', '}', '"', '\'', '/'];
-    if !punct.contains(&next_first) && !prev_last.is_whitespace() {
-        if prev_last == '>' && next_first.is_alphanumeric() {
-            // avoid double spaces if already present
-            if prev.ends_with(' ') || next.starts_with(' ') {
-                return false;
-            }
-            return true;
+    if !punct.contains(&next_first)
+        && !prev_last.is_whitespace()
+        && prev_last == '>'
+        && next_first.is_alphanumeric()
+    {
+        // avoid double spaces if already present
+        if prev.ends_with(' ') || next.starts_with(' ') {
+            return false;
         }
+        return true;
     }
     false
 }
@@ -506,30 +594,57 @@ fn highlight_with_inkjet(language: Option<&str>, code: &str) -> Option<String> {
     }
 }
 
-pub fn wrap_html_document(title: &str, body: &str) -> String {
-    // Try to load static/template.html and static/styles.css
-    let template_path = "static/template.html";
-    let css_href = "static/styles.css";
-    match fs::read_to_string(template_path) {
-        Ok(tpl) => {
-            let page = tpl
-                .replace("{{title}}", &html_escape_attr(title))
-                .replace("{{css}}", css_href)
-                .replace("{{body}}", body);
-            page
-        }
-        Err(_) => {
-            // Fallback inline template if static files are missing
-            let fallback = format!(
-                "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
-                <title>{}</title>\
-                <link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css\" integrity=\"sha384-5TcZemv2l/9On385z///+d7MSYlvIEw9FuZTIdZ14vJLqWphw7e7ZPuOiCHJcFCP\" crossorigin=\"anonymous\">\
-                <style>body{{max-width:820px;margin:2rem auto;padding:0 1rem;line-height:1.65;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Ubuntu,'Helvetica Neue',Arial,sans-serif}}</style></head><body>{}</body></html>",
-                html_escape_attr(title), body
-            );
-            fallback
-        }
+pub fn wrap_html_document(
+    config: &config::Config,
+    title: &str,
+    body: &str,
+    table_of_contents: &str,
+) -> Result<String, String> {
+    let template_path = &config.html.template_path;
+    let template = fs::read_to_string(template_path)
+        .map_err(|e| format!("failed to read HTML template {}: {}", template_path, e))?;
+
+    let css_href = html_escape_attr(&css_href_with_root(config));
+
+    Ok(template
+        .replace("{{title}}", &html_escape_attr(title))
+        .replace("{{css}}", &css_href)
+        .replace("{{tableofcontents}}", table_of_contents)
+        .replace("{{body}}", body))
+}
+
+fn css_href_with_root(config: &config::Config) -> String {
+    let raw = config.html.css_href.trim();
+    if raw.is_empty() {
+        return String::new();
     }
+
+    match config.root_url.as_deref() {
+        Some(root) if raw.starts_with('/') && !raw.starts_with("//") => {
+            if root == "/" {
+                raw.to_string()
+            } else {
+                format!("{}{}", root, raw)
+            }
+        }
+        Some(root) if is_relative_href(raw) => {
+            let trimmed = raw.trim_start_matches('/');
+            if root == "/" {
+                format!("/{}", trimmed)
+            } else {
+                format!("{}/{}", root, trimmed)
+            }
+        }
+        _ => raw.to_string(),
+    }
+}
+
+fn is_relative_href(href: &str) -> bool {
+    !href.is_empty()
+        && !href.starts_with('/')
+        && !href.starts_with('#')
+        && !href.starts_with("//")
+        && !href.contains(':')
 }
 
 #[cfg(test)]
@@ -542,6 +657,8 @@ mod tests {
             engine: None,
             memo_math: std::collections::HashMap::new(),
             config: crate::config::Config::default(),
+            toc: Vec::new(),
+            section_counters: Vec::new(),
         };
         let html = r.render_paragraph(&[
             InlineElement::Text("A ".into()),
@@ -557,6 +674,8 @@ mod tests {
             engine: None,
             memo_math: std::collections::HashMap::new(),
             config: crate::config::Config::default(),
+            toc: Vec::new(),
+            section_counters: Vec::new(),
         };
         let caption = vec![
             InlineElement::Text("An ".into()),
@@ -575,11 +694,51 @@ mod tests {
             engine: None,
             memo_math: std::collections::HashMap::new(),
             config: cfg,
+            toc: Vec::new(),
+            section_counters: Vec::new(),
         };
         let html = r.render_inlines(&[InlineElement::Link {
             text: vec![InlineElement::Text("link".into())],
             url: "/foo.html".into(),
         }]);
         assert!(html.contains("href=\"https://example.com/foo.html\""));
+    }
+
+    #[test]
+    fn css_href_respects_root_for_relative_paths() {
+        let mut cfg = crate::config::Config::default();
+        cfg.root_url = Some("https://example.com/blog".into());
+        cfg.html.css_href = "static/styles.css".into();
+        let href = super::css_href_with_root(&cfg);
+        assert_eq!(href, "https://example.com/blog/static/styles.css");
+    }
+
+    #[test]
+    fn css_href_respects_root_for_root_relative_paths() {
+        let mut cfg = crate::config::Config::default();
+        cfg.root_url = Some("https://example.com".into());
+        cfg.html.css_href = "/assets/styles.css".into();
+        let href = super::css_href_with_root(&cfg);
+        assert_eq!(href, "https://example.com/assets/styles.css");
+    }
+
+    #[test]
+    fn table_of_contents_for_math_example_matches_expected() {
+        use crate::parser::Parser;
+        use std::fs;
+
+        let source = fs::read_to_string("example/math.dllu").expect("math example fixture");
+        let mut parser = Parser::default();
+        parser.parse(&source);
+
+        let mut renderer = HtmlRenderer::new(&crate::config::Config::default());
+        renderer.render(&parser.article);
+        let toc = renderer
+            .table_of_contents_html()
+            .expect("expected table of contents");
+
+        let expected = r##"<div class="toc"><ol><li><a href="#s1"><span class="tocnum">1</span> <span>Transformation parameterisation</span></a><ol><li><a href="#s1.1"><span class="tocnum">1.1</span> <span>Transforming a point</span></a></li><li><a href="#s1.2"><span class="tocnum">1.2</span> <span>The Lie algebra</span></a></li><li><a href="#s1.3"><span class="tocnum">1.3</span> <span>The exponential map</span></a></li><li><a href="#s1.4"><span class="tocnum">1.4</span> <span>Notation summary</span></a></li></ol></li><li><a href="#s2"><span class="tocnum">2</span> <span>Derivatives</span></a></li><li><a href="#s3"><span class="tocnum">3</span> <span>Optimisation</span></a><ol><li><a href="#s3.1"><span class="tocnum">3.1</span> <span>Optimisation under uncertainty</span></a></li><li><a href="#s3.2"><span class="tocnum">3.2</span> <span>Robust loss functions</span></a></li></ol></li><li><a href="#s4"><span class="tocnum">4</span> <span>Trajectory representation</span></a></li><li><a href="#s5"><span class="tocnum">5</span> <span>Parameterisation of the perturbation</span></a></li><li><a href="#s6"><span class="tocnum">6</span> <span>Constraints</span></a><ol><li><a href="#s6.1"><span class="tocnum">6.1</span> <span>Position constraint</span></a><ol><li><a href="#s6.1.1"><span class="tocnum">6.1.1</span> <span>Residual</span></a></li><li><a href="#s6.1.2"><span class="tocnum">6.1.2</span> <span>Left Jacobian</span></a></li><li><a href="#s6.1.3"><span class="tocnum">6.1.3</span> <span>Right Jacobian</span></a></li></ol></li><li><a href="#s6.2"><span class="tocnum">6.2</span> <span>Loop closure constraint</span></a><ol><li><a href="#s6.2.1"><span class="tocnum">6.2.1</span> <span>Residual</span></a></li><li><a href="#s6.2.2"><span class="tocnum">6.2.2</span> <span>Left Jacobians</span></a></li><li><a href="#s6.2.3"><span class="tocnum">6.2.3</span> <span>Right Jacobians</span></a></li></ol></li><li><a href="#s6.3"><span class="tocnum">6.3</span> <span>Gravity constraint</span></a><ol><li><a href="#s6.3.1"><span class="tocnum">6.3.1</span> <span>Residual</span></a></li><li><a href="#s6.3.2"><span class="tocnum">6.3.2</span> <span>Left Jacobian</span></a></li><li><a href="#s6.3.3"><span class="tocnum">6.3.3</span> <span>Right Jacobian</span></a></li></ol></li><li><a href="#s6.4"><span class="tocnum">6.4</span> <span>Point constraint</span></a><ol><li><a href="#s6.4.1"><span class="tocnum">6.4.1</span> <span>Residual</span></a></li><li><a href="#s6.4.2"><span class="tocnum">6.4.2</span> <span>Left Jacobian</span></a></li><li><a href="#s6.4.3"><span class="tocnum">6.4.3</span> <span>Right Jacobian</span></a></li></ol></li><li><a href="#s6.5"><span class="tocnum">6.5</span> <span>Velocity constraint</span></a><ol><li><a href="#s6.5.1"><span class="tocnum">6.5.1</span> <span>Residual</span></a></li><li><a href="#s6.5.2"><span class="tocnum">6.5.2</span> <span>Left Jacobian</span></a></li></ol></li><li><a href="#s6.6"><span class="tocnum">6.6</span> <span>Regularisation constraint</span></a><ol><li><a href="#s6.6.1"><span class="tocnum">6.6.1</span> <span>Residual</span></a></li><li><a href="#s6.6.2"><span class="tocnum">6.6.2</span> <span>Jacobian</span></a></li></ol></li></ol></li><li><a href="#s7"><span class="tocnum">7</span> <span>References</span></a></li></ol></div>"##;
+
+        assert_eq!(toc, expected);
     }
 }

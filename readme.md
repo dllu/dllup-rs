@@ -19,6 +19,12 @@ timings = false
 # Base URL used for site-relative links like "/post.html"
 root_url = "https://example.com"
 
+# Path to the HTML wrapper template used to produce the final page
+template_path = "static/template.html"
+
+# HREF for the page stylesheet. Relative values are joined with root_url.
+css_href = "static/styles.css"
+
 [math]
 # Try to spawn the persistent Node.js-based KaTeX helper before other options
 prefer_persistent = false
@@ -30,7 +36,9 @@ command = "npx katex"
 
 Math is rendered to inline HTML (KaTeX-compatible). When `math.command` is set the tool will run it, otherwise it first tries to spawn the bundled persistent KaTeX helper and falls back to `npx katex`. If every option fails, the raw TeX is emitted inside `<span class="math-inline">` or `<div class="math-display">` elements.
 
-When `root_url` is configured, any link or image whose URL starts with `/` is prefixed with that root (e.g., `/foo.html` becomes `https://example.com/foo.html`).
+When `root_url` is configured, any link or image whose URL starts with `/` is prefixed with that root (e.g., `/foo.html` becomes `https://example.com/foo.html`). The configured `css_href` follows the same rules when it is relative.
+
+The template is rendered by replacing `{{title}}`, `{{css}}`, `{{tableofcontents}}`, and `{{body}}`. A nested table of contents is generated from the section headings; include `{{tableofcontents}}` inside the template to display it.
 * supports cross references references and tables
 * html5 semantic figure and figcaption for images
 * implemented in rust for some reason

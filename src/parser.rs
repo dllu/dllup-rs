@@ -1,5 +1,4 @@
 use crate::ast::*;
-use lazy_static;
 use regex::Regex;
 use std::collections::HashMap;
 use std::str::Lines;
@@ -39,7 +38,7 @@ impl Parser {
         let mut blocks = Vec::new();
         let mut lines = s.lines().peekable();
 
-        while let Some(_) = lines.peek() {
+        while lines.peek().is_some() {
             if let Some(block) = self.parse_block(&mut lines) {
                 let ind = blocks.len();
                 match &block {
@@ -259,7 +258,7 @@ impl Parser {
             let trimmed = line.trim();
             if let Some(rest) = trimmed.strip_prefix("pic ") {
                 if let Some((left, caption)) = rest.split_once(" : ") {
-                    let mut left = left.trim();
+                    let left = left.trim();
                     // left contains: URL and then ALT text
                     let mut parts = left.split_whitespace();
                     let url = parts.next().unwrap_or("").to_string();
@@ -268,15 +267,13 @@ impl Parser {
                     let mut text = Self::parse_inline_elements(caption.trim());
                     let mut id = None;
                     for element in &mut text {
-                        match element {
-                            InlineElement::ReferenceAnchor {
-                                content,
-                                ref mut invisible,
-                            } => {
-                                *invisible = true;
-                                id = Some(content);
-                            }
-                            _ => {}
+                        if let InlineElement::ReferenceAnchor {
+                            content,
+                            ref mut invisible,
+                        } = element
+                        {
+                            *invisible = true;
+                            id = Some(content);
                         }
                     }
                     return Block::ImageFigure {
@@ -437,7 +434,7 @@ impl Parser {
             }
         }
 
-        Block::Paragraph(Self::parse_inline_elements(&content.trim_end()))
+        Block::Paragraph(Self::parse_inline_elements(content.trim_end()))
     }
 
     fn parse_inline_elements(s: &str) -> Vec<InlineElement> {
@@ -629,7 +626,7 @@ impl Parser {
         }
         // First line is header
         let header_cells =
-            parse_table_row_cells(table_lines.get(0).map(|s| s.as_str()).unwrap_or(""));
+            parse_table_row_cells(table_lines.first().map(|s| s.as_str()).unwrap_or(""));
         let header = header_cells
             .into_iter()
             .map(|cell| Self::parse_inline_elements(cell.trim()))
