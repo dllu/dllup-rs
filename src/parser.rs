@@ -3,10 +3,13 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::str::Lines;
 
+lazy_static! {
+    static ref TABLE_SEPARATOR_RE: Regex = Regex::new(r"^(?:\\||\\s|\\-)*$").unwrap();
+}
+
 #[derive(Debug, Default)]
 pub struct Parser {
     pub article: Article,
-    section_headers: Vec<usize>,
     image_figures: Vec<usize>,
     display_equations: Vec<usize>,
     tables: Vec<usize>,
@@ -47,9 +50,6 @@ impl Parser {
                     }
                     Block::DisplayMath { .. } => {
                         self.display_equations.push(ind);
-                    }
-                    Block::SectionHeader { .. } => {
-                        self.section_headers.push(ind);
                     }
                     Block::Table { .. } => {
                         self.tables.push(ind);
@@ -149,8 +149,8 @@ impl Parser {
 
         if let Some(&line) = lines.peek() {
             let trimmed = line.trim();
-            if trimmed.starts_with("lang ") {
-                language = Some(trimmed[5..].to_string());
+            if let Some(stripped) = trimmed.strip_prefix("lang ") {
+                language = Some(stripped.to_string());
                 lines.next();
             }
         }
@@ -222,12 +222,9 @@ impl Parser {
             let level = trimmed.chars().take_while(|&c| c == '#').count();
             let text = trimmed[level..].trim();
             let id = self.generate_id(text);
-            let id_number = self.section_headers.len();
-
             Block::SectionHeader {
                 level,
                 id,
-                id_number,
                 text: text.to_string(),
             }
         } else {
@@ -241,8 +238,8 @@ impl Parser {
 
         while let Some(&line) = lines.peek() {
             let trimmed = line.trim();
-            if trimmed.starts_with("> ") {
-                content.push_str(&trimmed[2..]);
+            if let Some(stripped) = trimmed.strip_prefix("> ") {
+                content.push_str(stripped);
                 content.push('\n');
                 lines.next();
             } else {
@@ -605,7 +602,7 @@ impl Parser {
         let mut table_lines: Vec<String> = Vec::new();
         while let Some(&line) = lines.peek() {
             let t = line.trim();
-            if t.starts_with("| ") || Regex::new(r"^(\||\s|\-)*$").unwrap().is_match(t) {
+            if t.starts_with("| ") || TABLE_SEPARATOR_RE.is_match(t) {
                 table_lines.push(line.to_string());
                 lines.next();
             } else {
@@ -635,7 +632,7 @@ impl Parser {
         let mut rows: Vec<Vec<Vec<InlineElement>>> = Vec::new();
         for row in table_lines.into_iter().skip(1) {
             let t = row.trim();
-            if Regex::new(r"^(\||\s|\-)*$").unwrap().is_match(t) {
+            if TABLE_SEPARATOR_RE.is_match(t) {
                 continue;
             }
             let cells = parse_table_row_cells(&row)

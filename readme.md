@@ -38,7 +38,7 @@ Math is rendered to inline HTML (KaTeX-compatible). When `math.command` is set t
 
 When `root_url` is configured, any link or image whose URL starts with `/` is prefixed with that root (e.g., `/foo.html` becomes `https://example.com/foo.html`). The configured `css_href` follows the same rules when it is relative.
 
-The template is rendered by replacing `{{title}}`, `{{css}}`, `{{tableofcontents}}`, and `{{body}}`. A nested table of contents is generated from the section headings; include `{{tableofcontents}}` inside the template to display it.
+The template is rendered by replacing `{{title}}`, `{{css}}`, `{{tableofcontents}}`, `{{metas}}`, and `{{body}}`. A nested table of contents is generated from the section headings; include `{{tableofcontents}}` inside the template to display it. The `{{metas}}` placeholder is populated with Open Graph / Twitter tags derived from the first paragraph and first image, along with sensible defaults for robots and card type.
 * supports cross references references and tables
 * html5 semantic figure and figcaption for images
 * implemented in rust for some reason

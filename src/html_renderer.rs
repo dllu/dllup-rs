@@ -15,6 +15,8 @@ pub struct HtmlRenderer {
     config: config::Config,
     toc: Vec<TocEntry>,
     section_counters: Vec<usize>,
+    meta_description: Option<String>,
+    meta_image: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -33,6 +35,8 @@ impl HtmlRenderer {
             config: config.clone(),
             toc: Vec::new(),
             section_counters: Vec::new(),
+            meta_description: None,
+            meta_image: None,
         }
     }
 
@@ -61,6 +65,8 @@ impl HtmlRenderer {
     pub fn render(&mut self, article: &Article) -> String {
         self.toc.clear();
         self.section_counters.clear();
+        self.meta_description = None;
+        self.meta_image = None;
         let mut html = String::new();
 
         if let Some(header) = &article.header {
@@ -107,6 +113,59 @@ impl HtmlRenderer {
         Some(html)
     }
 
+    pub fn meta_tags(&self, title: &str) -> String {
+        let mut tags = Vec::new();
+        if let Some(image) = &self.meta_image {
+            tags.push(format!(
+                "<meta property=\"og:image\" content=\"{}\" />",
+                html_escape_attr(image)
+            ));
+        }
+
+        if let Some(description) = &self.meta_description {
+            let escaped = html_escape_attr(description);
+            tags.push(format!(
+                "<meta property=\"og:description\" content=\"{}\" />",
+                escaped
+            ));
+            tags.push(format!(
+                "<meta name=\"description\" content=\"{}\" />",
+                escaped
+            ));
+        }
+
+        tags.push(format!(
+            "<meta property=\"og:title\" content=\"{}\" />",
+            html_escape_attr(title)
+        ));
+
+        let twitter_card = if self.meta_image.is_some() {
+            "summary_large_image"
+        } else {
+            "summary"
+        };
+        tags.push(format!(
+            "<meta name=\"twitter:card\" content=\"{}\">",
+            twitter_card
+        ));
+
+        tags.push("<meta name=\"robots\" content=\"max-image-preview:large\">".to_string());
+
+        if tags.is_empty() {
+            return String::new();
+        }
+
+        let mut result = String::new();
+        for (idx, tag) in tags.iter().enumerate() {
+            if idx > 0 {
+                result.push('\n');
+                result.push_str("  ");
+            }
+            result.push_str(tag);
+        }
+        result
+    }
+
     fn render_header(&self, header: &ArticleHeader) -> String {
         let mut html = String::new();
         html.push_str("<header>\n");
@@ -127,9 +186,9 @@ impl HtmlRenderer {
             Block::CodeBlock { language, code } => {
                 self.render_code_block(language.as_deref(), code)
             }
-            Block::SectionHeader {
-                level, id, text, ..
-            } => self.render_section_header(*level, id, text),
+            Block::SectionHeader { level, id, text } => {
+                self.render_section_header(*level, id, text)
+            }
             Block::BlockQuote(elements) => {
                 let content = self.render_inlines(elements);
                 format!("<blockquote>{}</blockquote>\n", content)
@@ -148,7 +207,10 @@ impl HtmlRenderer {
             } => self.render_display_math(id.as_deref(), *id_number, content),
             Block::UnorderedList(items) => self.render_unordered_list(items),
             Block::OrderedList(items) => self.render_ordered_list(items),
-            Block::Paragraph(elements) => self.render_paragraph(elements),
+            Block::Paragraph(elements) => {
+                self.capture_description(elements);
+                self.render_paragraph(elements)
+            }
             Block::Table {
                 id_number,
                 header,
@@ -221,6 +283,28 @@ impl HtmlRenderer {
         anchor_id
     }
 
+    fn capture_description(&mut self, elements: &[InlineElement]) {
+        if self.meta_description.is_some() {
+            return;
+        }
+        let text = extract_text(elements).trim().to_string();
+        if !text.is_empty() {
+            self.meta_description = Some(text);
+        }
+    }
+
+    fn capture_image(&mut self, url: &str) {
+        if self.meta_image.is_some() {
+            return;
+        }
+        let trimmed = url.trim();
+        if trimmed.is_empty() {
+            return;
+        }
+        let resolved = self.url_with_root(trimmed);
+        self.meta_image = Some(resolved.into_owned());
+    }
+
     fn render_image_figure(
         &mut self,
         url: &str,
@@ -229,6 +313,7 @@ impl HtmlRenderer {
         alt: &str,
         text: &[InlineElement],
     ) -> String {
+        self.capture_image(url);
         let fig_id_num = id_number + 1;
         let fig_id_attr = id
             .map(escape_html)
@@ -545,9 +630,9 @@ impl HtmlRenderer {
     fn render_table(
         &mut self,
         id_number: usize,
-        header: &Vec<Vec<InlineElement>>,
-        rows: &Vec<Vec<Vec<InlineElement>>>,
-        caption: &Vec<InlineElement>,
+        header: &[Vec<InlineElement>],
+        rows: &[Vec<Vec<InlineElement>>],
+        caption: &[InlineElement],
     ) -> String {
         let table_id = format!("table{}", id_number + 1);
         let mut out = String::new();
@@ -599,6 +684,7 @@ pub fn wrap_html_document(
     title: &str,
     body: &str,
     table_of_contents: &str,
+    metas: &str,
 ) -> Result<String, String> {
     let template_path = &config.html.template_path;
     let template = fs::read_to_string(template_path)
@@ -610,6 +696,7 @@ pub fn wrap_html_document(
         .replace("{{title}}", &html_escape_attr(title))
         .replace("{{css}}", &css_href)
         .replace("{{tableofcontents}}", table_of_contents)
+        .replace("{{metas}}", metas)
         .replace("{{body}}", body))
 }
 
@@ -659,6 +746,8 @@ mod tests {
             config: crate::config::Config::default(),
             toc: Vec::new(),
             section_counters: Vec::new(),
+            meta_description: None,
+            meta_image: None,
         };
         let html = r.render_paragraph(&[
             InlineElement::Text("A ".into()),
@@ -676,6 +765,8 @@ mod tests {
             config: crate::config::Config::default(),
             toc: Vec::new(),
             section_counters: Vec::new(),
+            meta_description: None,
+            meta_image: None,
         };
         let caption = vec![
             InlineElement::Text("An ".into()),
@@ -696,6 +787,8 @@ mod tests {
             config: cfg,
             toc: Vec::new(),
             section_counters: Vec::new(),
+            meta_description: None,
+            meta_image: None,
         };
         let html = r.render_inlines(&[InlineElement::Link {
             text: vec![InlineElement::Text("link".into())],
@@ -740,5 +833,50 @@ mod tests {
         let expected = r##"<div class="toc"><ol><li><a href="#s1"><span class="tocnum">1</span> <span>Transformation parameterisation</span></a><ol><li><a href="#s1.1"><span class="tocnum">1.1</span> <span>Transforming a point</span></a></li><li><a href="#s1.2"><span class="tocnum">1.2</span> <span>The Lie algebra</span></a></li><li><a href="#s1.3"><span class="tocnum">1.3</span> <span>The exponential map</span></a></li><li><a href="#s1.4"><span class="tocnum">1.4</span> <span>Notation summary</span></a></li></ol></li><li><a href="#s2"><span class="tocnum">2</span> <span>Derivatives</span></a></li><li><a href="#s3"><span class="tocnum">3</span> <span>Optimisation</span></a><ol><li><a href="#s3.1"><span class="tocnum">3.1</span> <span>Optimisation under uncertainty</span></a></li><li><a href="#s3.2"><span class="tocnum">3.2</span> <span>Robust loss functions</span></a></li></ol></li><li><a href="#s4"><span class="tocnum">4</span> <span>Trajectory representation</span></a></li><li><a href="#s5"><span class="tocnum">5</span> <span>Parameterisation of the perturbation</span></a></li><li><a href="#s6"><span class="tocnum">6</span> <span>Constraints</span></a><ol><li><a href="#s6.1"><span class="tocnum">6.1</span> <span>Position constraint</span></a><ol><li><a href="#s6.1.1"><span class="tocnum">6.1.1</span> <span>Residual</span></a></li><li><a href="#s6.1.2"><span class="tocnum">6.1.2</span> <span>Left Jacobian</span></a></li><li><a href="#s6.1.3"><span class="tocnum">6.1.3</span> <span>Right Jacobian</span></a></li></ol></li><li><a href="#s6.2"><span class="tocnum">6.2</span> <span>Loop closure constraint</span></a><ol><li><a href="#s6.2.1"><span class="tocnum">6.2.1</span> <span>Residual</span></a></li><li><a href="#s6.2.2"><span class="tocnum">6.2.2</span> <span>Left Jacobians</span></a></li><li><a href="#s6.2.3"><span class="tocnum">6.2.3</span> <span>Right Jacobians</span></a></li></ol></li><li><a href="#s6.3"><span class="tocnum">6.3</span> <span>Gravity constraint</span></a><ol><li><a href="#s6.3.1"><span class="tocnum">6.3.1</span> <span>Residual</span></a></li><li><a href="#s6.3.2"><span class="tocnum">6.3.2</span> <span>Left Jacobian</span></a></li><li><a href="#s6.3.3"><span class="tocnum">6.3.3</span> <span>Right Jacobian</span></a></li></ol></li><li><a href="#s6.4"><span class="tocnum">6.4</span> <span>Point constraint</span></a><ol><li><a href="#s6.4.1"><span class="tocnum">6.4.1</span> <span>Residual</span></a></li><li><a href="#s6.4.2"><span class="tocnum">6.4.2</span> <span>Left Jacobian</span></a></li><li><a href="#s6.4.3"><span class="tocnum">6.4.3</span> <span>Right Jacobian</span></a></li></ol></li><li><a href="#s6.5"><span class="tocnum">6.5</span> <span>Velocity constraint</span></a><ol><li><a href="#s6.5.1"><span class="tocnum">6.5.1</span> <span>Residual</span></a></li><li><a href="#s6.5.2"><span class="tocnum">6.5.2</span> <span>Left Jacobian</span></a></li></ol></li><li><a href="#s6.6"><span class="tocnum">6.6</span> <span>Regularisation constraint</span></a><ol><li><a href="#s6.6.1"><span class="tocnum">6.6.1</span> <span>Residual</span></a></li><li><a href="#s6.6.2"><span class="tocnum">6.6.2</span> <span>Jacobian</span></a></li></ol></li></ol></li><li><a href="#s7"><span class="tocnum">7</span> <span>References</span></a></li></ol></div>"##;
 
         assert_eq!(toc, expected);
+    }
+
+    #[test]
+    fn metas_for_chickenrice_example() {
+        use crate::parser::Parser;
+        use std::fs;
+
+        let source =
+            fs::read_to_string("example/chickenrice.dllu").expect("chicken rice example fixture");
+        let mut parser = Parser::default();
+        parser.parse(&source);
+
+        let mut renderer = HtmlRenderer {
+            engine: None,
+            memo_math: std::collections::HashMap::new(),
+            config: crate::config::Config::default(),
+            toc: Vec::new(),
+            section_counters: Vec::new(),
+            meta_description: None,
+            meta_image: None,
+        };
+
+        renderer.render(&parser.article);
+        let title = parser
+            .article
+            .header
+            .as_ref()
+            .map(|h| h.title.as_str())
+            .unwrap_or("Document");
+        let metas = renderer.meta_tags(title);
+
+        let expected = concat!(
+            "<meta property=\"og:image\" content=\"https://pics.dllu.net/file/dllu-pics/2020-05-29-18-17-47_DSCF5250_adec3569ef61415da569075c8d18157b9f6790ee_1200.jpg\" />\n  ",
+            "<meta property=\"og:description\" content=\"Hainanese Chicken Rice (海南鸡饭), more commonly referred to as just &quot;chicken rice&quot; is a Singaporean dish consisting of poached chicken, rice cooked in chicken broth, soy sauce, ginger, and garlic.\n",
+            "Over time, the dish has evolved significantly, following several waves of Chinese immigration to Singapore.\n",
+            "The history of the dish is roughly as follows:\" />\n  ",
+            "<meta name=\"description\" content=\"Hainanese Chicken Rice (海南鸡饭), more commonly referred to as just &quot;chicken rice&quot; is a Singaporean dish consisting of poached chicken, rice cooked in chicken broth, soy sauce, ginger, and garlic.\n",
+            "Over time, the dish has evolved significantly, following several waves of Chinese immigration to Singapore.\n",
+            "The history of the dish is roughly as follows:\" />\n  ",
+            "<meta property=\"og:title\" content=\"Chicken rice in San Francisco\" />\n  ",
+            "<meta name=\"twitter:card\" content=\"summary_large_image\">\n  ",
+            "<meta name=\"robots\" content=\"max-image-preview:large\">"
+        );
+
+        assert_eq!(metas, expected);
     }
 }

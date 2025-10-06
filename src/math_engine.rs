@@ -51,7 +51,7 @@ impl MathEngine for ExternalCmdEngine {
 }
 
 pub struct PersistentKatexEngine {
-    child: Child,
+    _child: Child,
     stdin: ChildStdin,
     stdout: BufReader<ChildStdout>,
 }
@@ -90,7 +90,7 @@ rl.on('line', (line) => {
         let stdin = child.stdin.take().ok_or("failed to open node stdin")?;
         let stdout = child.stdout.take().ok_or("failed to open node stdout")?;
         Ok(Self {
-            child,
+            _child: child,
             stdin,
             stdout: BufReader::new(stdout),
         })
@@ -109,7 +109,7 @@ impl MathEngine for PersistentKatexEngine {
         if out.is_empty() {
             return Err("no response from katex child".into());
         }
-        let resp: KatexResp = serde_json::from_str(&out.trim_end()).map_err(|e| e.to_string())?;
+        let resp: KatexResp = serde_json::from_str(out.trim_end()).map_err(|e| e.to_string())?;
         Ok(resp.html)
     }
 }

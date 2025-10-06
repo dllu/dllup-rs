@@ -26,15 +26,8 @@ fn main() {
         .map(PathBuf::from)
         .unwrap_or_else(|| config::default_config_path(input_path));
 
-    let config = if args.len() == 3 {
-        match config::Config::load(&config_path) {
-            Ok(cfg) => cfg,
-            Err(e) => {
-                eprintln!("{}", e);
-                std::process::exit(1);
-            }
-        }
-    } else if config_path.exists() {
+    let config_should_load = args.len() == 3 || config_path.exists();
+    let config = if config_should_load {
         match config::Config::load(&config_path) {
             Ok(cfg) => cfg,
             Err(e) => {
@@ -72,7 +65,8 @@ fn main() {
     let t2 = Instant::now();
     let toc_html = renderer.table_of_contents_html();
     let toc_str = toc_html.as_deref().unwrap_or("");
-    let html = match html_renderer::wrap_html_document(&config, title, &body, toc_str) {
+    let metas = renderer.meta_tags(title);
+    let html = match html_renderer::wrap_html_document(&config, title, &body, toc_str, &metas) {
         Ok(html) => html,
         Err(e) => {
             eprintln!("{}", e);

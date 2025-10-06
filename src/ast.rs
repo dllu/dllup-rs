@@ -11,6 +11,7 @@ pub struct ArticleHeader {
 }
 
 #[derive(Debug)]
+#[allow(clippy::enum_variant_names)]
 pub enum Block {
     Raw(String),
     CodeBlock {
@@ -20,7 +21,6 @@ pub enum Block {
     SectionHeader {
         level: usize,
         id: String,
-        id_number: usize,
         text: String,
     },
     BlockQuote(Vec<InlineElement>),
@@ -68,7 +68,9 @@ pub enum InlineElement {
     },
     Emphasis(Vec<InlineElement>),
     Strong(Vec<InlineElement>),
+    #[allow(dead_code)]
     Reference(String),
+    #[allow(dead_code)]
     ReferenceAnchor {
         content: String,
         invisible: bool,
