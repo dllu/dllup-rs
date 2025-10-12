@@ -4,6 +4,7 @@ extern crate lazy_static;
 mod ast;
 mod config;
 mod html_renderer;
+mod image_processor;
 mod math_engine;
 mod parser;
 
@@ -53,7 +54,11 @@ fn main() {
     let t_parse = t0.elapsed();
 
     let t1 = Instant::now();
-    let mut renderer = html_renderer::HtmlRenderer::new(&config);
+    let asset_root = input_path
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
+    let mut renderer = html_renderer::HtmlRenderer::with_asset_root(&config, asset_root);
     let body = renderer.render(&parser.article);
     let t_render = t1.elapsed();
     let title = parser

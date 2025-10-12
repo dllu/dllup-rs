@@ -1,13 +1,15 @@
 use crate::ast::*;
 use crate::config;
+use crate::image_processor;
 use crate::math_engine::{ExternalCmdEngine, MathEngine};
 use inkjet::formatter::ThemedHtml;
-use inkjet::theme::vendored::ONEDARKER;
+use inkjet::theme::vendored::ONELIGHT;
 use inkjet::theme::Theme;
 use inkjet::{Highlighter, Language};
 use regex::Regex;
 use std::borrow::Cow;
 use std::fs;
+use std::path::PathBuf;
 
 pub struct HtmlRenderer {
     engine: Option<Box<dyn MathEngine>>, // external command or none
@@ -17,6 +19,8 @@ pub struct HtmlRenderer {
     section_counters: Vec<usize>,
     meta_description: Option<String>,
     meta_image: Option<String>,
+    image_processor: image_processor::ImageProcessor,
+    asset_root: PathBuf,
 }
 
 #[derive(Debug, Clone)]
@@ -28,7 +32,19 @@ struct TocEntry {
 }
 
 impl HtmlRenderer {
+    #[allow(dead_code)]
     pub fn new(config: &config::Config) -> Self {
+        let asset_root = config
+            .images
+            .base_dir
+            .as_ref()
+            .map(PathBuf::from)
+            .or_else(|| std::env::current_dir().ok())
+            .unwrap_or_else(|| PathBuf::from("."));
+        Self::with_asset_root(config, asset_root)
+    }
+
+    pub fn with_asset_root(config: &config::Config, asset_root: PathBuf) -> Self {
         Self {
             engine: Self::make_engine_from_config(config),
             memo_math: std::collections::HashMap::new(),
@@ -37,6 +53,8 @@ impl HtmlRenderer {
             section_counters: Vec::new(),
             meta_description: None,
             meta_image: None,
+            image_processor: image_processor::ImageProcessor::new(config),
+            asset_root,
         }
     }
 
@@ -313,27 +331,253 @@ impl HtmlRenderer {
         alt: &str,
         text: &[InlineElement],
     ) -> String {
-        self.capture_image(url);
         let fig_id_num = id_number + 1;
         let fig_id_attr = id
             .map(escape_html)
             .unwrap_or_else(|| format!("fig{}", fig_id_num));
 
         let caption_html = self.render_inlines(text);
-        let alt_text = alt.to_string();
+        match self.image_processor.process(url, &self.asset_root) {
+            Ok(processed) if processed.original.is_some() || !processed.variants.is_empty() => self
+                .render_processed_figure(processed, &fig_id_attr, fig_id_num, alt, &caption_html),
+            Ok(_) => {
+                eprintln!("image processing produced no variants for {}", url);
+                self.capture_image(url);
+                self.render_image_figure_fallback(url, &fig_id_attr, fig_id_num, alt, &caption_html)
+            }
+            Err(err) => {
+                eprintln!("image processing error for {}: {}", url, err);
+                self.capture_image(url);
+                self.render_image_figure_fallback(url, &fig_id_attr, fig_id_num, alt, &caption_html)
+            }
+        }
+    }
 
+    fn render_processed_figure(
+        &mut self,
+        processed: image_processor::ProcessedImage,
+        fig_id_attr: &str,
+        fig_id_num: usize,
+        alt: &str,
+        caption_html: &str,
+    ) -> String {
+        struct RenderVariant {
+            width: u32,
+            url: String,
+            mime: String,
+        }
+
+        struct DownloadEntry {
+            url: String,
+            width: u32,
+            height: u32,
+            is_original: bool,
+            mime: String,
+        }
+
+        let mut all_variants: Vec<(&image_processor::ImageVariant, bool)> =
+            processed.variants.iter().map(|v| (v, false)).collect();
+        if let Some(original_variant) = processed.original.as_ref() {
+            all_variants.push((original_variant, true));
+        }
+
+        if all_variants.is_empty() {
+            self.capture_image(&processed.original_reference);
+            return self.render_image_figure_fallback(
+                &processed.original_reference,
+                fig_id_attr,
+                fig_id_num,
+                alt,
+                caption_html,
+            );
+        }
+
+        all_variants.sort_by_key(|(variant, _)| variant.width);
+
+        if let Some((variant, _)) = all_variants.last() {
+            self.capture_image(&variant.url);
+        }
+
+        let mut render_variants = Vec::new();
+        let mut last_width: Option<u32> = None;
+        for (variant, _) in &all_variants {
+            if last_width == Some(variant.width) {
+                continue;
+            }
+            last_width = Some(variant.width);
+            render_variants.push(RenderVariant {
+                width: variant.width,
+                url: self.escape_url(&variant.url),
+                mime: variant.mime_type.clone(),
+            });
+        }
+
+        let fallback_variant = render_variants.last().unwrap();
+
+        let mut figure = String::new();
+        let class_attr = if processed.is_wide {
+            " class=\"wide\""
+        } else {
+            ""
+        };
+        figure.push_str(&format!("<figure id=\"{}\"{}>\n", fig_id_attr, class_attr));
+        figure.push_str(&format!("  <a href=\"{}\">\n", fallback_variant.url));
+        figure.push_str("    <picture>\n");
+
+        if render_variants.len() > 1 {
+            for variant in render_variants.iter().take(render_variants.len() - 1) {
+                let media = format!("(max-width: {}px)", variant.width);
+                figure.push_str(&format!(
+                    "      <source media=\"{}\" srcset=\"{} {}w\" type=\"{}\"/>\n",
+                    html_escape_attr(&media),
+                    variant.url,
+                    variant.width,
+                    html_escape_attr(&variant.mime),
+                ));
+            }
+        }
+
+        let sizes_attr = if processed.is_wide {
+            "100vw".to_string()
+        } else {
+            format!(
+                "(max-width: {}px) 100vw, {}px",
+                processed.display_width, processed.display_width
+            )
+        };
+        let srcset = render_variants
+            .iter()
+            .map(|variant| format!("{} {}w", variant.url, variant.width))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        figure.push_str(&format!(
+            "      <img src=\"{}\" alt=\"{}\" width=\"{}\" height=\"{}\" loading=\"lazy\" decoding=\"async\" srcset=\"{}\" sizes=\"{}\"/>\n",
+            fallback_variant.url,
+            escape_html(alt),
+            processed.display_width,
+            processed.display_height.max(1),
+            srcset,
+            html_escape_attr(&sizes_attr),
+        ));
+        figure.push_str("    </picture>\n");
+        figure.push_str("  </a>\n");
+        figure.push_str("  <figcaption>\n");
+        figure.push_str(&format!(
+            "    <p><a href=\"#{}\" class=\"fignum\">FIGURE {}</a> {}</p>\n",
+            fig_id_attr, fig_id_num, caption_html
+        ));
+
+        if let Some(exif) = processed.exif.as_ref() {
+            if !exif.entries.is_empty() {
+                figure.push_str(
+                    "    <details>\n      <summary>Image metadata</summary>\n      <ul>\n",
+                );
+                for (label, value) in &exif.entries {
+                    figure.push_str(&format!(
+                        "        <li><strong>{}</strong>: {}</li>\n",
+                        escape_html(label),
+                        escape_html(value)
+                    ));
+                }
+                figure.push_str("      </ul>\n    </details>\n");
+            }
+        }
+
+        let mut downloads: Vec<DownloadEntry> = Vec::new();
+        for variant in &processed.variants {
+            let url = self.escape_url(&variant.url);
+            if let Some(entry) = downloads.iter_mut().find(|existing| existing.url == url) {
+                entry.width = variant.width;
+                entry.height = variant.height;
+            } else {
+                downloads.push(DownloadEntry {
+                    url,
+                    width: variant.width,
+                    height: variant.height,
+                    is_original: false,
+                    mime: variant.mime_type.clone(),
+                });
+            }
+        }
+        if let Some(original_variant) = processed.original.as_ref() {
+            let url = self.escape_url(&original_variant.url);
+            if let Some(entry) = downloads.iter_mut().find(|existing| existing.url == url) {
+                entry.width = original_variant.width;
+                entry.height = original_variant.height;
+                entry.is_original = true;
+                entry.mime = original_variant.mime_type.clone();
+            } else {
+                downloads.push(DownloadEntry {
+                    url,
+                    width: original_variant.width,
+                    height: original_variant.height,
+                    is_original: true,
+                    mime: original_variant.mime_type.clone(),
+                });
+            }
+        }
+        downloads.sort_by_key(|entry| entry.width);
+
+        figure.push_str("    <ul aria-label=\"download sizes\">\n");
+        for entry in downloads {
+            let label = if entry.is_original && entry.mime == "image/svg+xml" {
+                "Original".to_string()
+            } else if entry.is_original {
+                format!("Original ({}x{}px)", entry.width, entry.height)
+            } else {
+                format!("{}x{}px", entry.width, entry.height)
+            };
+            figure.push_str(&format!(
+                "      <li><a href=\"{}\">{}</a></li>\n",
+                entry.url, label
+            ));
+        }
+        figure.push_str("    </ul>\n");
+        figure.push_str("  </figcaption>\n");
+        figure.push_str("</figure>\n");
+        figure
+    }
+
+    fn render_image_figure_fallback(
+        &self,
+        url: &str,
+        fig_id_attr: &str,
+        fig_id_num: usize,
+        alt: &str,
+        caption_html: &str,
+    ) -> String {
         let href = self.escape_url(url);
-        let src = self.escape_url(url);
-        format!(
-            "<figure id=\"{}\"><a href=\"{}\"><img src=\"{}\" alt=\"{}\"/></a><figcaption><a href=\"#{}\" class=\"fignum\">FIGURE {}</a> {}</figcaption></figure>\n",
-            fig_id_attr,
+        let layout_width = self.config.images.layout_width;
+        let layout_height = layout_width;
+
+        let mut figure = String::new();
+        figure.push_str(&format!("<figure id=\"{}\">\n", fig_id_attr));
+        figure.push_str(&format!("  <a href=\"{}\">\n", href));
+        figure.push_str("    <picture>\n");
+        figure.push_str(&format!(
+            "      <img src=\"{}\" alt=\"{}\" width=\"{}\" height=\"{}\" loading=\"lazy\" decoding=\"async\"/>\n",
             href,
-            src,
-            escape_html(&alt_text),
-            fig_id_attr,
-            fig_id_num,
-            caption_html
-        )
+            escape_html(alt),
+            layout_width,
+            layout_height
+        ));
+        figure.push_str("    </picture>\n");
+        figure.push_str("  </a>\n");
+        figure.push_str("  <figcaption>\n");
+        figure.push_str(&format!(
+            "    <p><a href=\"#{}\" class=\"fignum\">FIGURE {}</a> {}</p>\n",
+            fig_id_attr, fig_id_num, caption_html
+        ));
+        figure.push_str("    <ul aria-label=\"download sizes\">\n");
+        figure.push_str(&format!(
+            "      <li><a href=\"{}\">original</a></li>\n",
+            href
+        ));
+        figure.push_str("    </ul>\n");
+        figure.push_str("  </figcaption>\n");
+        figure.push_str("</figure>\n");
+        figure
     }
 
     fn render_display_math(&mut self, id: Option<&str>, id_number: usize, content: &str) -> String {
@@ -668,7 +912,7 @@ impl HtmlRenderer {
 
 fn highlight_with_inkjet(language: Option<&str>, code: &str) -> Option<String> {
     let mut highlighter = Highlighter::new();
-    let theme = Theme::from_helix(ONEDARKER).ok()?;
+    let theme = Theme::from_helix(ONELIGHT).ok()?;
     let formatter = ThemedHtml::new(theme);
     let lang = language.and_then(Language::from_token).unwrap_or_else(|| {
         Language::from_token("plaintext").unwrap_or(Language::from_token("none").unwrap())
@@ -737,18 +981,25 @@ fn is_relative_href(href: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
-    #[test]
-    fn fallback_inline_math() {
-        let mut r = HtmlRenderer {
+    fn renderer_with_config(cfg: crate::config::Config) -> HtmlRenderer {
+        HtmlRenderer {
             engine: None,
             memo_math: std::collections::HashMap::new(),
-            config: crate::config::Config::default(),
+            config: cfg.clone(),
             toc: Vec::new(),
             section_counters: Vec::new(),
             meta_description: None,
             meta_image: None,
-        };
+            image_processor: crate::image_processor::ImageProcessor::new(&cfg),
+            asset_root: PathBuf::from("."),
+        }
+    }
+
+    #[test]
+    fn fallback_inline_math() {
+        let mut r = renderer_with_config(crate::config::Config::default());
         let html = r.render_paragraph(&[
             InlineElement::Text("A ".into()),
             InlineElement::InlineMath("x+y".into()),
@@ -759,37 +1010,53 @@ mod tests {
 
     #[test]
     fn render_figure_alt_and_caption() {
+        use tempfile::tempdir;
+
+        const PNG_1X1: &[u8] = &[
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
+            0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00,
+            0x00, 0x90, 0x77, 0x53, 0xDE, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x08,
+            0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00, 0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xDD, 0x8D,
+            0x64, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+        ];
+
+        let tmp = tempdir().unwrap();
+        let image_path = tmp.path().join("tiny.png");
+        std::fs::write(&image_path, PNG_1X1).unwrap();
+
+        let mut cfg = crate::config::Config::default();
+        cfg.images.cache_dir = tmp.path().join("cache").to_string_lossy().into_owned();
+        cfg.images.sizes = vec![1200];
+        cfg.images.layout_width = 1200;
+
         let mut r = HtmlRenderer {
             engine: None,
             memo_math: std::collections::HashMap::new(),
-            config: crate::config::Config::default(),
+            config: cfg.clone(),
             toc: Vec::new(),
             section_counters: Vec::new(),
             meta_description: None,
             meta_image: None,
+            image_processor: crate::image_processor::ImageProcessor::new(&cfg),
+            asset_root: tmp.path().to_path_buf(),
         };
+
         let caption = vec![
             InlineElement::Text("An ".into()),
             InlineElement::Emphasis(vec![InlineElement::Text("example".into())]),
         ];
-        let html = r.render_image_figure("/img.png", None, 0, "An example", &caption);
+        let html = r.render_image_figure("tiny.png", None, 0, "An example", &caption);
         assert!(html.contains("FIGURE 1"));
         assert!(html.contains("alt=\"An example\""));
+        assert!(html.contains("<picture>"));
+        assert!(html.contains("aria-label=\"download sizes\""));
     }
 
     #[test]
     fn root_url_prefixes_internal_links() {
         let mut cfg = crate::config::Config::default();
         cfg.root_url = Some("https://example.com".into());
-        let mut r = HtmlRenderer {
-            engine: None,
-            memo_math: std::collections::HashMap::new(),
-            config: cfg,
-            toc: Vec::new(),
-            section_counters: Vec::new(),
-            meta_description: None,
-            meta_image: None,
-        };
+        let mut r = renderer_with_config(cfg);
         let html = r.render_inlines(&[InlineElement::Link {
             text: vec![InlineElement::Text("link".into())],
             url: "/foo.html".into(),
@@ -845,15 +1112,7 @@ mod tests {
         let mut parser = Parser::default();
         parser.parse(&source);
 
-        let mut renderer = HtmlRenderer {
-            engine: None,
-            memo_math: std::collections::HashMap::new(),
-            config: crate::config::Config::default(),
-            toc: Vec::new(),
-            section_counters: Vec::new(),
-            meta_description: None,
-            meta_image: None,
-        };
+        let mut renderer = renderer_with_config(crate::config::Config::default());
 
         renderer.render(&parser.article);
         let title = parser
@@ -864,9 +1123,20 @@ mod tests {
             .unwrap_or("Document");
         let metas = renderer.meta_tags(title);
 
-        let expected = concat!(
-            "<meta property=\"og:image\" content=\"https://pics.dllu.net/file/dllu-pics/2020-05-29-18-17-47_DSCF5250_adec3569ef61415da569075c8d18157b9f6790ee_1200.jpg\" />\n  ",
-            "<meta property=\"og:description\" content=\"Hainanese Chicken Rice (海南鸡饭), more commonly referred to as just &quot;chicken rice&quot; is a Singaporean dish consisting of poached chicken, rice cooked in chicken broth, soy sauce, ginger, and garlic.\n",
+        let mut lines = metas.lines();
+        let image_line = lines.next().expect("og:image meta");
+        assert!(
+            image_line.contains("/img/"),
+            "unexpected og:image line: {image_line}"
+        );
+        assert!(
+            image_line.ends_with(".jpg\" />"),
+            "unexpected og:image suffix: {image_line}"
+        );
+
+        let rest = lines.collect::<Vec<_>>().join("\n");
+        let expected_rest = concat!(
+            "  <meta property=\"og:description\" content=\"Hainanese Chicken Rice (海南鸡饭), more commonly referred to as just &quot;chicken rice&quot; is a Singaporean dish consisting of poached chicken, rice cooked in chicken broth, soy sauce, ginger, and garlic.\n",
             "Over time, the dish has evolved significantly, following several waves of Chinese immigration to Singapore.\n",
             "The history of the dish is roughly as follows:\" />\n  ",
             "<meta name=\"description\" content=\"Hainanese Chicken Rice (海南鸡饭), more commonly referred to as just &quot;chicken rice&quot; is a Singaporean dish consisting of poached chicken, rice cooked in chicken broth, soy sauce, ginger, and garlic.\n",
@@ -877,6 +1147,6 @@ mod tests {
             "<meta name=\"robots\" content=\"max-image-preview:large\">"
         );
 
-        assert_eq!(metas, expected);
+        assert_eq!(rest, expected_rest);
     }
 }
