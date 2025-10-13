@@ -420,15 +420,15 @@ impl HtmlRenderer {
         } else {
             ""
         };
-        figure.push_str(&format!("<figure id=\"{}\"{}>\n", fig_id_attr, class_attr));
-        figure.push_str(&format!("  <a href=\"{}\">\n", fallback_variant.url));
-        figure.push_str("    <picture>\n");
+        figure.push_str(&format!("<figure id=\"{}\"{}>", fig_id_attr, class_attr));
+        figure.push_str(&format!("<a href=\"{}\">", fallback_variant.url));
+        figure.push_str("<picture>");
 
         if render_variants.len() > 1 {
             for variant in render_variants.iter().take(render_variants.len() - 1) {
                 let media = format!("(max-width: {}px)", variant.width);
                 figure.push_str(&format!(
-                    "      <source media=\"{}\" srcset=\"{} {}w\" type=\"{}\"/>\n",
+                    "<source media=\"{}\" srcset=\"{} {}w\" type=\"{}\"/>",
                     html_escape_attr(&media),
                     variant.url,
                     variant.width,
@@ -452,7 +452,7 @@ impl HtmlRenderer {
             .join(", ");
 
         figure.push_str(&format!(
-            "      <img src=\"{}\" alt=\"{}\" width=\"{}\" height=\"{}\" loading=\"lazy\" decoding=\"async\" srcset=\"{}\" sizes=\"{}\"/>\n",
+            "<img src=\"{}\" alt=\"{}\" width=\"{}\" height=\"{}\" loading=\"lazy\" decoding=\"async\" srcset=\"{}\" sizes=\"{}\"/>",
             fallback_variant.url,
             escape_html(alt),
             processed.display_width,
@@ -460,27 +460,27 @@ impl HtmlRenderer {
             srcset,
             html_escape_attr(&sizes_attr),
         ));
-        figure.push_str("    </picture>\n");
-        figure.push_str("  </a>\n");
-        figure.push_str("  <figcaption>\n");
+        figure.push_str("</picture>");
+        figure.push_str("</a>");
+        figure.push_str("<figcaption>");
         figure.push_str(&format!(
-            "    <p><a href=\"#{}\" class=\"fignum\">FIGURE {}</a> {}</p>\n",
+            "<p><a href=\"#{}\" class=\"fignum\">FIGURE {}</a> {}</p>",
             fig_id_attr, fig_id_num, caption_html
         ));
 
         if let Some(exif) = processed.exif.as_ref() {
             if !exif.entries.is_empty() {
-                figure.push_str(
-                    "    <details>\n      <summary>Image metadata</summary>\n      <ul>\n",
-                );
+                let mut details =
+                    String::from("<details><summary>Image metadata</summary><ul>");
                 for (label, value) in &exif.entries {
-                    figure.push_str(&format!(
-                        "        <li><strong>{}</strong>: {}</li>\n",
+                    details.push_str(&format!(
+                        "<li><strong>{}</strong>: {}</li>",
                         escape_html(label),
                         escape_html(value)
                     ));
                 }
-                figure.push_str("      </ul>\n    </details>\n");
+                details.push_str("</ul></details>");
+                figure.push_str(&details);
             }
         }
 
@@ -522,23 +522,19 @@ impl HtmlRenderer {
         }
         downloads.sort_by_key(|entry| entry.width);
 
-        figure.push_str("    <ul aria-label=\"download sizes\">\n");
+        figure.push_str("<ul aria-label=\"download sizes\">");
         for entry in downloads {
             let label = if entry.is_original && entry.mime == "image/svg+xml" {
                 "Original".to_string()
             } else if entry.is_original {
-                format!("Original ({} × {}px)", entry.width, entry.height)
+                format!("original {} × {}", entry.width, entry.height)
             } else {
-                format!("{} × {}px", entry.width, entry.height)
+                format!("{} × {}", entry.width, entry.height)
             };
-            figure.push_str(&format!(
-                "      <li><a href=\"{}\">{}</a></li>\n",
-                entry.url, label
-            ));
+            figure.push_str(&format!("<li><a href=\"{}\">{}</a></li>", entry.url, label));
         }
-        figure.push_str("    </ul>\n");
-        figure.push_str("  </figcaption>\n");
-        figure.push_str("</figure>\n");
+        figure.push_str("</ul>");
+        figure.push_str("</figcaption></figure>\n");
         figure
     }
 
@@ -555,31 +551,27 @@ impl HtmlRenderer {
         let layout_height = layout_width;
 
         let mut figure = String::new();
-        figure.push_str(&format!("<figure id=\"{}\">\n", fig_id_attr));
-        figure.push_str(&format!("  <a href=\"{}\">\n", href));
-        figure.push_str("    <picture>\n");
+        figure.push_str(&format!("<figure id=\"{}\">", fig_id_attr));
+        figure.push_str(&format!("<a href=\"{}\">", href));
+        figure.push_str("<picture>");
         figure.push_str(&format!(
-            "      <img src=\"{}\" alt=\"{}\" width=\"{}\" height=\"{}\" loading=\"lazy\" decoding=\"async\"/>\n",
+            "<img src=\"{}\" alt=\"{}\" width=\"{}\" height=\"{}\" loading=\"lazy\" decoding=\"async\"/>",
             href,
             escape_html(alt),
             layout_width,
             layout_height
         ));
-        figure.push_str("    </picture>\n");
-        figure.push_str("  </a>\n");
-        figure.push_str("  <figcaption>\n");
+        figure.push_str("</picture>");
+        figure.push_str("</a>");
+        figure.push_str("<figcaption>");
         figure.push_str(&format!(
-            "    <p><a href=\"#{}\" class=\"fignum\">FIGURE {}</a> {}</p>\n",
+            "<p><a href=\"#{}\" class=\"fignum\">FIGURE {}</a> {}</p>",
             fig_id_attr, fig_id_num, caption_html
         ));
-        figure.push_str("    <ul aria-label=\"download sizes\">\n");
-        figure.push_str(&format!(
-            "      <li><a href=\"{}\">original</a></li>\n",
-            href
-        ));
-        figure.push_str("    </ul>\n");
-        figure.push_str("  </figcaption>\n");
-        figure.push_str("</figure>\n");
+        figure.push_str("<ul aria-label=\"download sizes\">");
+        figure.push_str(&format!("<li><a href=\"{}\">original</a></li>", href));
+        figure.push_str("</ul>");
+        figure.push_str("</figcaption></figure>\n");
         figure
     }
 
