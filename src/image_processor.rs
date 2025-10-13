@@ -5,7 +5,6 @@ use image::imageops::FilterType;
 use image::{DynamicImage, GenericImageView, ImageDecoder, ImageFormat};
 use rexif::{parse_buffer_quiet, ExifData, ExifTag, TagValue};
 use roxmltree::Document;
-use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{self, Cursor, Read};
 use std::path::{Path, PathBuf};
@@ -47,7 +46,6 @@ pub struct ExifSummary {
 struct SourceImage {
     reference: String,
     bytes: Vec<u8>,
-    digest: String,
     format: SourceFormat,
     cached_path: Option<PathBuf>,
 }
@@ -161,6 +159,23 @@ impl ImageProcessor {
         }
         let (exif_result, _warnings) = parse_buffer_quiet(&source.bytes);
         let exif_data = exif_result.ok();
+
+        let extension = extension_for_format(format).ok_or(ImageError::UnsupportedFormat)?;
+        let original_path = self.ensure_original_cached(&source, extension)?;
+
+        if let Some(processed) = self.try_build_processed_from_cache(
+            &source,
+            &original_path,
+            format,
+            extension,
+            exif_data.as_ref(),
+        ) {
+            return Ok(processed);
+        }
+
+        let original_url = self.public_url_for(&original_path);
+        let mime_type = mime_type_for_format(format).to_string();
+
         let mut exif_bytes = exif_data
             .as_ref()
             .and_then(|data| data.serialize().ok())
@@ -172,11 +187,6 @@ impl ImageProcessor {
             });
         let original_orientation = exif_data.as_ref().and_then(|data| exif_orientation(data));
 
-        let extension = extension_for_format(format).ok_or(ImageError::UnsupportedFormat)?;
-        let original_path = self.ensure_original_cached(&source, extension)?;
-        let original_url = self.public_url_for(&original_path);
-        let mime_type = mime_type_for_format(format).to_string();
-
         let mut image = image::load_from_memory(&source.bytes)
             .map_err(|e| ImageError::Decode(e.to_string()))?;
         if let Some(orientation) = original_orientation {
@@ -186,56 +196,44 @@ impl ImageProcessor {
             normalize_exif_orientation(bytes);
         }
 
-        let oriented_key = format!("{}:{}", source.digest, original_orientation.unwrap_or(1));
-        let oriented_digest = hash_bytes(oriented_key.as_bytes());
         let (width, height) = image.dimensions();
         let (display_width, display_height, is_wide) =
             compute_display_dimensions(width as f64, height as f64, self.config.layout_width);
 
-        let mut sizes = self.config.sizes.clone();
-        if !sizes.contains(&self.config.layout_width) {
-            sizes.push(self.config.layout_width);
-        }
-        if display_width > 0 && !sizes.contains(&display_width) {
-            sizes.push(display_width);
-        }
-        sizes.sort();
-        sizes.dedup();
-
         let mut variants: Vec<ImageVariant> = Vec::new();
-        for size in sizes {
-            let target_width = size.min(width);
-            if target_width == 0 {
-                continue;
-            }
-            if variants.last().map(|v| v.width) == Some(target_width) {
-                continue;
-            }
-            let filename = format!("{}-{}.{}", oriented_digest, target_width, extension);
-            fs::create_dir_all(&self.cache_dir)?;
-            let target_path = self.cache_dir.join(filename);
-            let target_height = if target_width == width {
-                height
-            } else {
-                ((target_width as f64 / width as f64) * height as f64)
-                    .round()
-                    .max(1.0) as u32
-            };
+        let original_stem = original_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "image".to_string());
 
-            if !target_path.exists() {
-                let resized = if target_width == width {
-                    image.clone()
-                } else {
-                    image.resize(target_width, target_height, FilterType::Lanczos3)
-                };
-                let encoded = encode_image(
-                    &resized,
-                    format,
-                    exif_bytes.as_deref(),
-                    self.config.jpeg_quality,
-                )?;
-                fs::write(&target_path, &encoded)?;
-            }
+        let target_widths = self.target_resize_widths(width, display_width);
+
+        for target_width in target_widths {
+            fs::create_dir_all(&self.cache_dir)?;
+            let filename = if extension.is_empty() {
+                format!("{}-{}", original_stem, target_width)
+            } else {
+                format!("{}-{}.{}", original_stem, target_width, extension)
+            };
+            let target_path = self.cache_dir.join(filename);
+            let target_height = ((target_width as f64 / width as f64) * height as f64)
+                .round()
+                .max(1.0) as u32;
+
+            let resized = if target_width == width {
+                image.clone()
+            } else {
+                image.resize(target_width, target_height, FilterType::Lanczos3)
+            };
+            let encoded = encode_image(
+                &resized,
+                format,
+                exif_bytes.as_deref(),
+                self.config.jpeg_quality,
+            )?;
+            fs::write(&target_path, &encoded)?;
 
             let url = self.public_url_for(&target_path);
             variants.push(ImageVariant {
@@ -254,6 +252,8 @@ impl ImageProcessor {
             url: original_url,
             mime_type: mime_type.clone(),
         };
+
+        save_cached_dimensions(&original_path, width, height)?;
 
         Ok(ProcessedImage {
             variants,
@@ -276,43 +276,58 @@ impl ImageProcessor {
 
     fn fetch_remote(&self, reference: &str) -> Result<SourceImage, ImageError> {
         fs::create_dir_all(&self.cache_dir)?;
-        let hash = hash_bytes(reference.as_bytes());
-        let extension = path_extension_from_str(reference);
-        let filename = match extension {
-            Some(ext) => format!("{}.{}", hash, ext),
-            None => hash.clone(),
-        };
-        let path = self.cache_dir.join(filename);
-        let bytes = if path.exists() {
-            fs::read(&path)?
-        } else {
-            let agent = ureq::AgentBuilder::new()
-                .timeout(Duration::from_secs(self.config.remote_fetch_timeout_secs))
-                .build();
-            let response = agent
-                .get(reference)
-                .call()
-                .map_err(|e| ImageError::Network(e.to_string()))?;
-            if response.status() >= 400 {
-                return Err(ImageError::Network(format!(
-                    "failed to fetch {}: HTTP {}",
-                    reference,
-                    response.status()
-                )));
+        let trimmed = reference.split('?').next().unwrap_or(reference);
+        let raw_name = Path::new(trimmed)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or(trimmed);
+        let mut filename = sanitize_filename(raw_name);
+        if filename.is_empty() {
+            filename = "image".to_string();
+        }
+        if Path::new(&filename).extension().is_none() {
+            if let Some(ext) = path_extension_from_str(trimmed) {
+                if !ext.is_empty() {
+                    filename.push('.');
+                    filename.push_str(ext);
+                }
             }
-            let mut reader = response.into_reader();
-            let mut buf = Vec::new();
-            reader.read_to_end(&mut buf)?;
-            fs::write(&path, &buf)?;
-            buf
-        };
+        }
+        let original_path = self.cache_dir.join(&filename);
+        if original_path.exists() {
+            let bytes = fs::read(&original_path)?;
+            return Ok(SourceImage {
+                reference: reference.to_string(),
+                cached_path: Some(original_path),
+                format: detect_format(reference, &bytes)?,
+                bytes,
+            });
+        }
+
+        let agent = ureq::AgentBuilder::new()
+            .timeout(Duration::from_secs(self.config.remote_fetch_timeout_secs))
+            .build();
+        let response = agent
+            .get(reference)
+            .call()
+            .map_err(|e| ImageError::Network(e.to_string()))?;
+        if response.status() >= 400 {
+            return Err(ImageError::Network(format!(
+                "failed to fetch {}: HTTP {}",
+                reference,
+                response.status()
+            )));
+        }
+        let mut reader = response.into_reader();
+        let mut buf = Vec::new();
+        reader.read_to_end(&mut buf)?;
+        fs::write(&original_path, &buf)?;
 
         Ok(SourceImage {
             reference: reference.to_string(),
-            digest: hash_bytes(&bytes),
-            cached_path: Some(path),
-            format: detect_format(reference, &bytes)?,
-            bytes,
+            cached_path: Some(original_path),
+            format: detect_format(reference, &buf)?,
+            bytes: buf,
         })
     }
 
@@ -330,11 +345,94 @@ impl ImageProcessor {
         let bytes = fs::read(&path)?;
         Ok(SourceImage {
             reference: reference.to_string(),
-            digest: hash_bytes(&bytes),
             cached_path: Some(path.clone()),
             format: detect_format(reference, &bytes)?,
             bytes,
         })
+    }
+
+    fn try_build_processed_from_cache(
+        &self,
+        source: &SourceImage,
+        original_path: &Path,
+        format: ImageFormat,
+        extension: &str,
+        exif_data: Option<&ExifData>,
+    ) -> Option<ProcessedImage> {
+        let (width, height) = load_cached_dimensions(original_path)?;
+        let original_stem = original_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .filter(|s| !s.trim().is_empty())?;
+        let mime_type = mime_type_for_format(format).to_string();
+        let (display_width, display_height, is_wide) =
+            compute_display_dimensions(width as f64, height as f64, self.config.layout_width);
+
+        let target_widths = self.target_resize_widths(width, display_width);
+        let mut variants = Vec::new();
+        for target_width in target_widths {
+            let filename = if extension.is_empty() {
+                format!("{}-{}", original_stem, target_width)
+            } else {
+                format!("{}-{}.{}", original_stem, target_width, extension)
+            };
+            let variant_path = self.cache_dir.join(&filename);
+            if !variant_path.exists() {
+                return None;
+            }
+            let target_height = ((target_width as f64 / width as f64) * height as f64)
+                .round()
+                .max(1.0) as u32;
+            variants.push(ImageVariant {
+                width: target_width,
+                height: target_height,
+                url: self.public_url_for(&variant_path),
+                mime_type: mime_type.clone(),
+            });
+        }
+        variants.sort_by_key(|v| v.width);
+
+        let entries = exif_data.map(|data| summarize_exif(data));
+
+        Some(ProcessedImage {
+            variants,
+            original: Some(ImageVariant {
+                width,
+                height,
+                url: self.public_url_for(original_path),
+                mime_type,
+            }),
+            display_width,
+            display_height,
+            original_reference: source.reference.clone(),
+            exif: entries,
+            is_wide,
+        })
+    }
+
+    fn target_resize_widths(&self, original_width: u32, display_width: u32) -> Vec<u32> {
+        let mut sizes = self.config.sizes.clone();
+        if !sizes.contains(&self.config.layout_width) {
+            sizes.push(self.config.layout_width);
+        }
+        if display_width > 0 && !sizes.contains(&display_width) {
+            sizes.push(display_width);
+        }
+        sizes.sort_unstable();
+        sizes.dedup();
+
+        let mut widths = Vec::new();
+        for size in sizes {
+            let target_width = size.min(original_width);
+            if target_width == 0 || target_width == original_width {
+                continue;
+            }
+            if widths.last().copied() == Some(target_width) {
+                continue;
+            }
+            widths.push(target_width);
+        }
+        widths
     }
 
     fn ensure_original_cached(
@@ -349,43 +447,32 @@ impl ImageProcessor {
         }
         fs::create_dir_all(&self.cache_dir)?;
 
-        let mut candidates = Vec::new();
-        if let Some(original_name) = preferred_filename(source, extension) {
-            candidates.push(original_name.clone());
-            let short_digest = &source.digest[..source.digest.len().min(12)];
-            candidates.push(format!("{}-{}", short_digest, original_name));
-        }
-        let digest_name = if extension.is_empty() {
-            source.digest.clone()
-        } else {
-            format!("{}.{}", source.digest, extension)
-        };
-        candidates.push(digest_name);
+        let base_name =
+            preferred_filename(source, extension).unwrap_or_else(|| default_filename(extension));
+        let mut target = self.cache_dir.join(&base_name);
 
-        for name in candidates {
-            let target = self.cache_dir.join(&name);
-            if target.exists() {
-                match fs::read(&target) {
-                    Ok(existing) if existing == source.bytes => return Ok(target),
-                    _ => continue,
-                }
-            } else {
-                fs::write(&target, &source.bytes)?;
+        if target.exists() {
+            if fs::read(&target)? == source.bytes {
                 return Ok(target);
+            }
+            let mut counter = 2usize;
+            loop {
+                let candidate_name = numbered_filename(&base_name, counter);
+                let candidate_path = self.cache_dir.join(&candidate_name);
+                if candidate_path.exists() {
+                    if fs::read(&candidate_path)? == source.bytes {
+                        return Ok(candidate_path);
+                    }
+                } else {
+                    target = candidate_path;
+                    break;
+                }
+                counter += 1;
             }
         }
 
-        // Fallback: write to digest-based unique name
-        let fallback_name = if extension.is_empty() {
-            format!("{}-orig", source.digest)
-        } else {
-            format!("{}-orig.{}", source.digest, extension)
-        };
-        let fallback = self.cache_dir.join(fallback_name);
-        if !fallback.exists() {
-            fs::write(&fallback, &source.bytes)?;
-        }
-        Ok(fallback)
+        fs::write(&target, &source.bytes)?;
+        Ok(target)
     }
 
     fn public_url_for(&self, path: &Path) -> String {
@@ -673,12 +760,6 @@ fn read_u32(slice: &[u8], le: bool) -> u32 {
     }
 }
 
-fn hash_bytes(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    hex::encode(hasher.finalize())
-}
-
 fn summarize_exif(exif: &ExifData) -> ExifSummary {
     let mut entries = Vec::new();
 
@@ -934,6 +1015,31 @@ fn preferred_filename(source: &SourceImage, extension: &str) -> Option<String> {
     Some(sanitized)
 }
 
+fn default_filename(extension: &str) -> String {
+    if extension.is_empty() {
+        "image".to_string()
+    } else {
+        format!("image.{}", extension)
+    }
+}
+
+fn numbered_filename(base: &str, counter: usize) -> String {
+    let path = Path::new(base);
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or(base);
+    match path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .filter(|s| !s.is_empty())
+    {
+        Some(ext) => format!("{}-{}.{}", stem, counter, ext),
+        None => format!("{}-{}", stem, counter),
+    }
+}
+
 fn sanitize_filename(input: &str) -> String {
     let no_query = input.split(&['?', '#'][..]).next().unwrap_or(input);
     let base = no_query
@@ -951,4 +1057,22 @@ fn sanitize_filename(input: &str) -> String {
         })
         .collect();
     sanitized.trim_matches('_').to_string()
+}
+
+fn dimension_cache_path(original_path: &Path) -> PathBuf {
+    original_path.with_extension("txt")
+}
+
+fn load_cached_dimensions(original_path: &Path) -> Option<(u32, u32)> {
+    let cache_path = dimension_cache_path(original_path);
+    let contents = fs::read_to_string(cache_path).ok()?;
+    let mut parts = contents.split_whitespace();
+    let width = parts.next()?.parse().ok()?;
+    let height = parts.next()?.parse().ok()?;
+    Some((width, height))
+}
+
+fn save_cached_dimensions(original_path: &Path, width: u32, height: u32) -> Result<(), io::Error> {
+    let cache_path = dimension_cache_path(original_path);
+    fs::write(cache_path, format!("{} {}\n", width, height))
 }

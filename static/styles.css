@@ -225,6 +225,7 @@ figcaption img {
 figure>a {
     cursor: zoom-in;
 }
+
 figcaption {
     font-size: 0.9em;
     line-height: 1.1em;
@@ -232,6 +233,18 @@ figcaption {
     color: var(--grey);
     hyphens: auto;
 }
+
+figcaption>ul {
+    list-style: none;
+}
+figcaption>ul>li {
+    display: inline-block;
+    margin: 1em;
+}
+figcaption>ul>li>a {
+    padding: 1em;
+}
+
 table {
     width: 100%;
     text-align: center;

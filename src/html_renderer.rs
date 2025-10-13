@@ -486,23 +486,26 @@ impl HtmlRenderer {
 
         let mut downloads: Vec<DownloadEntry> = Vec::new();
         for variant in &processed.variants {
-            let url = self.escape_url(&variant.url);
-            if let Some(entry) = downloads.iter_mut().find(|existing| existing.url == url) {
-                entry.width = variant.width;
-                entry.height = variant.height;
-            } else {
-                downloads.push(DownloadEntry {
-                    url,
-                    width: variant.width,
-                    height: variant.height,
-                    is_original: false,
-                    mime: variant.mime_type.clone(),
-                });
+            if downloads.iter().any(|existing| {
+                existing.width == variant.width && existing.height == variant.height
+            }) {
+                continue;
             }
+            downloads.push(DownloadEntry {
+                url: self.escape_url(&variant.url),
+                width: variant.width,
+                height: variant.height,
+                is_original: false,
+                mime: variant.mime_type.clone(),
+            });
         }
         if let Some(original_variant) = processed.original.as_ref() {
             let url = self.escape_url(&original_variant.url);
-            if let Some(entry) = downloads.iter_mut().find(|existing| existing.url == url) {
+            if let Some(entry) = downloads.iter_mut().find(|existing| {
+                existing.width == original_variant.width
+                    && existing.height == original_variant.height
+            }) {
+                entry.url = url;
                 entry.width = original_variant.width;
                 entry.height = original_variant.height;
                 entry.is_original = true;
@@ -524,9 +527,9 @@ impl HtmlRenderer {
             let label = if entry.is_original && entry.mime == "image/svg+xml" {
                 "Original".to_string()
             } else if entry.is_original {
-                format!("Original ({}x{}px)", entry.width, entry.height)
+                format!("Original ({} × {}px)", entry.width, entry.height)
             } else {
-                format!("{}x{}px", entry.width, entry.height)
+                format!("{} × {}px", entry.width, entry.height)
             };
             figure.push_str(&format!(
                 "      <li><a href=\"{}\">{}</a></li>\n",
@@ -981,7 +984,8 @@ fn is_relative_href(href: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
+    use image::{Rgb, RgbImage};
+    use std::path::{Path, PathBuf};
 
     fn renderer_with_config(cfg: crate::config::Config) -> HtmlRenderer {
         HtmlRenderer {
@@ -995,6 +999,11 @@ mod tests {
             image_processor: crate::image_processor::ImageProcessor::new(&cfg),
             asset_root: PathBuf::from("."),
         }
+    }
+
+    fn write_test_png(path: &Path) {
+        let img = RgbImage::from_pixel(1, 1, Rgb([255, 0, 0]));
+        img.save(path).unwrap();
     }
 
     #[test]
@@ -1012,17 +1021,9 @@ mod tests {
     fn render_figure_alt_and_caption() {
         use tempfile::tempdir;
 
-        const PNG_1X1: &[u8] = &[
-            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
-            0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00,
-            0x00, 0x90, 0x77, 0x53, 0xDE, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x08,
-            0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00, 0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xDD, 0x8D,
-            0x64, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
-        ];
-
         let tmp = tempdir().unwrap();
         let image_path = tmp.path().join("tiny.png");
-        std::fs::write(&image_path, PNG_1X1).unwrap();
+        write_test_png(&image_path);
 
         let mut cfg = crate::config::Config::default();
         cfg.images.cache_dir = tmp.path().join("cache").to_string_lossy().into_owned();
@@ -1105,14 +1106,38 @@ mod tests {
     #[test]
     fn metas_for_chickenrice_example() {
         use crate::parser::Parser;
-        use std::fs;
+        use tempfile::tempdir;
 
-        let source =
-            fs::read_to_string("example/chickenrice.dllu").expect("chicken rice example fixture");
+        let tmp = tempdir().unwrap();
+        let assets = tmp.path();
+        let image_path = assets.join("meta.png");
+        write_test_png(&image_path);
+
+        let mut cfg = crate::config::Config::default();
+        cfg.root_url = Some("https://example.com/posts".into());
+        cfg.images.cache_dir = assets.join("img").to_string_lossy().into_owned();
+        cfg.images.img_root_url = Some("https://cdn.example.com/images".into());
+        cfg.images.sizes = vec![480, 800];
+        cfg.images.layout_width = 800;
+
+        let source = format!(
+            "Test Title\n\n===\n\npic {} : Sample caption\n\nThis is a short description.\nSecond line for flavour.\n",
+            image_path.display()
+        );
         let mut parser = Parser::default();
         parser.parse(&source);
 
-        let mut renderer = renderer_with_config(crate::config::Config::default());
+        let mut renderer = HtmlRenderer {
+            engine: None,
+            memo_math: std::collections::HashMap::new(),
+            config: cfg.clone(),
+            toc: Vec::new(),
+            section_counters: Vec::new(),
+            meta_description: None,
+            meta_image: None,
+            image_processor: crate::image_processor::ImageProcessor::new(&cfg),
+            asset_root: assets.to_path_buf(),
+        };
 
         renderer.render(&parser.article);
         let title = parser
@@ -1125,28 +1150,38 @@ mod tests {
 
         let mut lines = metas.lines();
         let image_line = lines.next().expect("og:image meta");
-        assert!(
-            image_line.contains("/img/"),
-            "unexpected og:image line: {image_line}"
-        );
-        assert!(
-            image_line.ends_with(".jpg\" />"),
-            "unexpected og:image suffix: {image_line}"
+        assert_eq!(
+            image_line,
+            "<meta property=\"og:image\" content=\"https://cdn.example.com/images/meta.png\" />"
         );
 
-        let rest = lines.collect::<Vec<_>>().join("\n");
-        let expected_rest = concat!(
-            "  <meta property=\"og:description\" content=\"Hainanese Chicken Rice (海南鸡饭), more commonly referred to as just &quot;chicken rice&quot; is a Singaporean dish consisting of poached chicken, rice cooked in chicken broth, soy sauce, ginger, and garlic.\n",
-            "Over time, the dish has evolved significantly, following several waves of Chinese immigration to Singapore.\n",
-            "The history of the dish is roughly as follows:\" />\n  ",
-            "<meta name=\"description\" content=\"Hainanese Chicken Rice (海南鸡饭), more commonly referred to as just &quot;chicken rice&quot; is a Singaporean dish consisting of poached chicken, rice cooked in chicken broth, soy sauce, ginger, and garlic.\n",
-            "Over time, the dish has evolved significantly, following several waves of Chinese immigration to Singapore.\n",
-            "The history of the dish is roughly as follows:\" />\n  ",
-            "<meta property=\"og:title\" content=\"Chicken rice in San Francisco\" />\n  ",
-            "<meta name=\"twitter:card\" content=\"summary_large_image\">\n  ",
-            "<meta name=\"robots\" content=\"max-image-preview:large\">"
+        let rest = lines.collect::<Vec<_>>();
+        let rest_joined = rest.join("\n");
+        assert!(
+            rest_joined.contains("<meta property=\"og:description\""),
+            "missing og:description: {}",
+            rest_joined
         );
-
-        assert_eq!(rest, expected_rest);
+        assert!(
+            rest_joined
+                .contains("content=\"This is a short description.\nSecond line for flavour.\""),
+            "unexpected description: {}",
+            rest_joined
+        );
+        assert!(
+            rest_joined.contains("<meta property=\"og:title\" content=\"Test Title\" />"),
+            "missing og:title: {}",
+            rest_joined
+        );
+        assert!(
+            rest_joined.contains("<meta name=\"twitter:card\" content=\"summary_large_image\">"),
+            "missing twitter card: {}",
+            rest_joined
+        );
+        assert!(
+            rest_joined.contains("<meta name=\"robots\" content=\"max-image-preview:large\">"),
+            "missing robots meta: {}",
+            rest_joined
+        );
     }
 }
