@@ -3,6 +3,10 @@
     --light: #f3f2f0;
     --blue: #305ca9;
     --grey: #404040;
+    --dllu-size: 32px;
+    --dllu-thickness: 8px;
+    --dllu-margin: 16px;
+    --dllu-time: 0.8s;
 }
 
 * {
@@ -37,6 +41,12 @@ a:hover, a:focus {
 main {
     width: 600px;
     margin: 0 auto;
+}
+
+nav {
+    width: 80%;
+    max-width: 600px;
+    margin: 20px auto;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -154,6 +164,10 @@ figure.wide {
     position: relative;
     left: 50%;
     transform: translateX(-50%);
+}
+
+img {
+    height: auto;
 }
 figure.wide figcaption {
     width: 600px;
@@ -332,12 +346,10 @@ canvas {
     }
     .toc {
         position: absolute;
-        top: 0;
+        top: calc(2 * var(--dllu-thickness) + 2 * var(--dllu-size) + 2 * var(--dllu-margin));
         right: 50%;
         margin-right: 320px;
         width: 280px;
-        max-height: 100vh;
-        overflow-y: auto;
     }
     .toc>ol {
         margin: 3em 1em 3em 0;
@@ -359,4 +371,182 @@ canvas {
     body {
         font-size: 2.4vw;
     }
+}
+
+#hero {
+    display: block;
+    height: calc(2 * var(--dllu-thickness) + 2 * var(--dllu-size) + 2 * var(--dllu-margin));
+}
+
+#hero-a {
+    display: block;
+    height: calc(2 * var(--dllu-thickness) + 2 * var(--dllu-size) + 2 * var(--dllu-margin));
+    width:  calc(2 * var(--dllu-thickness) + 2 * var(--dllu-size) + 2 * var(--dllu-margin));
+    margin: 0 auto;
+}
+
+#hero-a:hover,
+#hero-a:focus {
+    background: none;
+}
+
+#dllu-hero {
+    display: block;
+    position: relative;
+    cursor: pointer;
+    margin: 0;
+    height: calc(2 * var(--dllu-thickness) + 2 * var(--dllu-size) + 2 * var(--dllu-margin));
+    width:  calc(2 * var(--dllu-thickness) + 2 * var(--dllu-size) + 2 * var(--dllu-margin));
+    border-radius: 50%; /* so that the hover target is a perfect circle */
+    transition: var(--dllu-time);
+    animation-name: dllu-hero-keyframes;
+    animation-duration: var(--dllu-time);
+    animation-iteration-count: 1;
+}
+
+#D, #L0, #L1, #U {
+    position: absolute;
+    width:  calc(var(--dllu-size) - 2 * var(--dllu-thickness));
+    height: calc(var(--dllu-size) - 2 * var(--dllu-thickness));
+    transition: var(--dllu-time);
+}
+
+#D {
+    padding-left: var(--dllu-thickness);
+    border-top: var(--dllu-thickness) solid var(--grey);
+    border-right: var(--dllu-thickness) solid var(--grey);
+    border-bottom: var(--dllu-thickness) solid var(--grey);
+    border-top-right-radius: 50%;
+    border-bottom-right-radius: 50%;
+    top: var(--dllu-margin);
+    left: var(--dllu-margin);
+    animation-name: D-keyframes;
+    animation-duration: var(--dllu-time);
+    animation-iteration-count: 1;
+}
+
+#L0, #L1 {
+    padding-top: var(--dllu-thickness);
+    padding-right: var(--dllu-thickness);
+    border-left: var(--dllu-thickness) solid var(--grey);
+    border-bottom: var(--dllu-thickness) solid var(--grey);
+    animation-name: L-keyframes;
+    animation-duration: var(--dllu-time);
+    animation-iteration-count: 1;
+}
+
+#L0 {
+    top:  calc(var(--dllu-size) + var(--dllu-margin) + 2 * var(--dllu-thickness));
+    left: var(--dllu-margin);
+}
+
+#L1 {
+    top:  var(--dllu-margin);
+    left: calc(var(--dllu-size) + var(--dllu-margin) + 2 * var(--dllu-thickness));
+}
+
+#U {
+    padding-top: var(--dllu-thickness);
+    border-right: var(--dllu-thickness) solid var(--grey);
+    border-left: var(--dllu-thickness) solid var(--grey);
+    border-bottom: var(--dllu-thickness) solid var(--grey);
+    border-bottom-right-radius: 50%
+    ;
+    border-bottom-left-radius: 50%;
+    top:  calc(var(--dllu-size) + var(--dllu-margin) + 2 * var(--dllu-thickness));
+    left: calc(var(--dllu-size) + var(--dllu-margin) + 2 * var(--dllu-thickness));
+    animation-name: U-keyframes;
+    animation-duration: var(--dllu-time);
+    animation-iteration-count: 1;
+}
+
+#hero-a:hover #dllu-hero {
+    transform: rotate(180deg);
+}
+
+#hero-a:hover #D,
+#hero-a:hover #L0,
+#hero-a:hover #L1,
+#hero-a:hover #U {
+    border-color: var(--blue);
+}
+
+#hero-a:hover #D {
+    transform: rotate(-90deg);
+}
+
+#hero-a:hover #L0,
+#hero-a:hover #L1 {
+    transform: rotate(-180deg);
+}
+
+#hero-a:hover #U {
+    transform: rotate(-270deg);
+}
+
+@keyframes dllu-hero-keyframes {
+    from {
+        transform: rotate(0deg);
+    } to {
+        transform: rotate(180deg);
+    }
+}
+@keyframes D-keyframes {
+    from {
+        transform: rotate(0deg);
+    } to {
+        transform: rotate(-90deg);
+    }
+}
+@keyframes L-keyframes {
+    from {
+        transform: rotate(0deg);
+    } to {
+        transform: rotate(-180deg);
+    }
+}
+@keyframes U-keyframes {
+    from {
+        transform: rotate(0deg);
+    } to {
+        transform: rotate(-270deg);
+    }
+}
+
+#blogposts {
+    display: table;
+}
+#blogposts a, #blogposts a:visited {
+    color: $dark;
+    .blogdate {
+        color: $grey;
+    }
+}
+#blogposts a:hover, a:focus {
+    background: $lgrey;
+    color: $grey;
+    .blogdate {
+        color: $light;
+        background: $grey;
+    }
+}
+#blogposts a {
+    display: table-row;
+    font-weight: 400;
+    line-height: 1.5em;
+}
+.blogdate {
+    display: table-cell;
+    color: $grey;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 0.8em;
+    font-weight: 600;
+    line-height: 1.5em / 0.8em;
+    padding: 5px 10px;
+    text-align: center;
+}
+.blogtitle {
+    display: table-cell;
+    padding: 5px 10px;
 }
