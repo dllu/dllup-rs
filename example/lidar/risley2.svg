@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 640" width="920" height="640">
+  <style>
+    .prism { fill:#ddd; stroke:#8a8f98; stroke-width:2; vector-effect:non-scaling-stroke }
+    .beam  { fill:none; stroke:#ff2a2a; stroke-width:4; stroke-linecap:round; vector-effect:non-scaling-stroke }
+  </style>
+
+  <!-- Top pair -->
+  <polygon class="prism" points="420.00,100.00 420.00,220.00 360.00,220.00"/>
+  <polygon class="prism" points="480.00,100.00 480.00,220.00 540.00,220.00"/>
+  <polyline class="beam" points="50.00,160.00 390.00,160.00 420.00,164.87 480.00,179.72 523.38,186.76 870.00,427.03"/>
+
+  <!-- Bottom pair -->
+  <polygon class="prism" points="420.00,380.00 420.00,500.00 360.00,500.00"/>
+  <polygon class="prism" points="480.00,380.00 480.00,500.00 540.00,380.00"/>
+  <polyline class="beam" points="50.00,440.00 390.00,440.00 420.00,444.87 480.00,459.72 498.63,462.75 870.00,462.75"/>
+</svg>
+

@@ -1,5 +1,7 @@
 SE(3) constraints for robotics
 
+2025-01-01
+
 ===
 
 This document summarizes some common maths used for state estimation of rigid bodies such as in robotics.

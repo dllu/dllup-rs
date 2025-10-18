@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 640" width="920" height="640">
+  <defs>
+    <style>
+      .prism { fill:#fff; stroke:#000; stroke-width:6; stroke-linejoin:round; }
+      .beam  { fill:none; stroke:#d41515; stroke-width:6; stroke-linecap:round; }
+      .label { font: 18px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; fill:#f00; }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="8" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#d41515"/>
+    </marker>
+  </defs>
+
+  <!-- Titles -->
+  <text x="40" y="48"  class="label">Risley pair — cumulative deflection (Snell, n: air 1.0 → glass 1.5)</text>
+  <text x="40" y="338" class="label">Opposed wedges — near-zero net deflection</text>
+
+  <!-- ===== Top prisms (co-rotated) ===== -->
+  <!-- Triangular wedges -->
+  <polygon class="prism" points="420.00,60.00 460.00,240.00 380.00,240.00"/>
+  <polygon class="prism" points="520.00,60.00 560.00,250.00 480.00,250.00"/>
+
+  <!-- Beam computed with Snell's law; kinks exactly on faces -->
+  <polyline class="beam" marker-end="url(#arrow)"
+    points="50.00,140.00 402.22,140.00 438.37,142.66 499.60,156.88 542.42,166.51 860.00,326.18"/>
+
+  <!-- ===== Bottom prisms (counter-rotated) ===== -->
+  <polygon class="prism" points="420.00,350.00 460.00,530.00 380.00,530.00"/>
+  <polygon class="prism" points="520.00,540.00 560.00,360.00 480.00,360.00"/>
+
+  <!-- Beam with cancellation; exact kinks at faces -->
+  <polyline class="beam" marker-end="url(#arrow)"
+    points="50.00,455.00 396.67,455.00 444.11,458.50 505.03,472.64 534.49,474.81 870.00,474.81"/>
+</svg>

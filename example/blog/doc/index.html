@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="author" content="Daniel Lawrence Lu">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>dllup markup language</title>
+  <meta property="og:image" content="file:///home/dllu/proj/dllup-rs/img/WpEUM8S.jpg" />
+  <meta property="og:description" content="dllup is a lightweight markup language designed for creating simple websites. It is a way to write an easily readable text file which the dllup parser turns into a static HTML page, or a LaTeX document. This document will cover the use of dllup to produce HTML webpages." />
+  <meta name="description" content="dllup is a lightweight markup language designed for creating simple websites. It is a way to write an easily readable text file which the dllup parser turns into a static HTML page, or a LaTeX document. This document will cover the use of dllup to produce HTML webpages." />
+  <meta property="og:title" content="dllup markup language" />
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="robots" content="max-image-preview:large">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css" integrity="sha384-5TcZemv2l/9On385z///+d7MSYlvIEw9FuZTIdZ14vJLqWphw7e7ZPuOiCHJcFCP" crossorigin="anonymous">
+  <link href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:400,400italic,600,600italic,700,700italic,900,900italic%7CSource+Code+Pro:500,600" rel="stylesheet" type="text/css">
+  <link rel="stylesheet" href="file:///home/dllu/proj/dllup-rs/static/styles.css">
+</head>
+<body>
+<nav id="hero"><a href="https://daniel.lawrence.lu/" id="hero-a"><span id="dllu-hero"><span style="display:none;">dllu</span><span id="D"></span><span id="L0"></span><span id="L1"></span><span id="U"></span></span></a></nav>
+<nav id="toc">
+<div class="toc"><ol><li><a href="#s1"><span class="tocnum">1</span> <span>Introduction</span></a><ol><li><a href="#s1.1"><span class="tocnum">1.1</span> <span>Philosophy</span></a></li><li><a href="#s1.2"><span class="tocnum">1.2</span> <span>Comparison to other languages</span></a><ol><li><a href="#s1.2.1"><span class="tocnum">1.2.1</span> <span>Comparison to Markdown</span></a></li><li><a href="#s1.2.2"><span class="tocnum">1.2.2</span> <span>Comparison to Jemdoc</span></a></li></ol></li></ol></li><li><a href="#s2"><span class="tocnum">2</span> <span>Syntax</span></a><ol><li><a href="#s2.1"><span class="tocnum">2.1</span> <span>Article header</span></a></li><li><a href="#s2.2"><span class="tocnum">2.2</span> <span>Code</span></a><ol><li><a href="#s2.2.1"><span class="tocnum">2.2.1</span> <span>Raw HTML</span></a></li><li><a href="#s2.2.2"><span class="tocnum">2.2.2</span> <span>Code blocks</span></a></li></ol></li><li><a href="#s2.3"><span class="tocnum">2.3</span> <span>Block elements</span></a><ol><li><a href="#s2.3.1"><span class="tocnum">2.3.1</span> <span>Section headers</span></a></li><li><a href="#s2.3.2"><span class="tocnum">2.3.2</span> <span>Blockquotes</span></a></li><li><a href="#s2.3.3"><span class="tocnum">2.3.3</span> <span>Images</span></a></li><li><a href="#s2.3.4"><span class="tocnum">2.3.4</span> <span>Display math equations</span></a></li><li><a href="#s2.3.5"><span class="tocnum">2.3.5</span> <span>Lists</span></a></li><li><a href="#s2.3.6"><span class="tocnum">2.3.6</span> <span>Tables</span></a></li><li><a href="#s2.3.7"><span class="tocnum">2.3.7</span> <span>Big button</span></a></li><li><a href="#s2.3.8"><span class="tocnum">2.3.8</span> <span>Paragraph</span></a></li></ol></li><li><a href="#s2.4"><span class="tocnum">2.4</span> <span>Inline elements</span></a><ol><li><a href="#s2.4.1"><span class="tocnum">2.4.1</span> <span>Monospace code snippet</span></a></li><li><a href="#s2.4.2"><span class="tocnum">2.4.2</span> <span>Inline math</span></a></li><li><a href="#s2.4.3"><span class="tocnum">2.4.3</span> <span>Links</span></a></li><li><a href="#s2.4.4"><span class="tocnum">2.4.4</span> <span>Emphasis and strong</span></a></li><li><a href="#s2.4.5"><span class="tocnum">2.4.5</span> <span>References</span></a></li></ol></li><li><a href="#s2.5"><span class="tocnum">2.5</span> <span>Typographical character substitutions</span></a><ol><li><a href="#s2.5.1"><span class="tocnum">2.5.1</span> <span>Special character escaping</span></a></li></ol></li></ol></li><li><a href="#s3"><span class="tocnum">3</span> <span>Implementation</span></a></li><li><a href="#s4"><span class="tocnum">4</span> <span>Installation</span></a><ol><li><a href="#s4.1"><span class="tocnum">4.1</span> <span>dllup to html</span></a><ol><li><a href="#s4.1.1"><span class="tocnum">4.1.1</span> <span>Compiling a single file</span></a></li></ol></li><li><a href="#s4.2"><span class="tocnum">4.2</span> <span>dllup to LaTeX</span></a><ol><li><a href="#s4.2.1"><span class="tocnum">4.2.1</span> <span>Compiling a single file</span></a></li></ol></li><li><a href="#s4.3"><span class="tocnum">4.3</span> <span>Syntax highlighting</span></a></li></ol></li><li><a href="#s5"><span class="tocnum">5</span> <span>FAQ</span></a></li></ol></div>
+</nav>
+<main>
+<header>
+<h1 id="top">dllup markup language</h1>
+<p class="date">2015-03-12</p>
+</header>
+<h1 id="introduction"><span id="s1">Introduction</span></h1>
+<p><strong>dllup</strong> is a <a href="https://en.wikipedia.org/wiki/Lightweight_markup_language">lightweight markup language</a> designed for creating simple websites. It is a way to write an easily readable text file which the dllup parser turns into a static HTML page, or a LaTeX document. This document will cover the use of dllup to produce HTML webpages.</p>
+<p>The name “dllup” is a portmanteau of my username and “markup”. It was inspired by <a href="http://jemdoc.jaboc.net/">jemdoc</a> and <a href="http://daringfireball.net/projects/markdown/">markdown</a>. It supports LaTeX equations, tables, figure captioning,  syntax highlighting of source code, and automatic section numbering with table of contents. However, it lacks many other features as it is deliberately simple.</p>
+<h2 id="philosophy"><span id="s1.1">Philosophy</span></h2>
+<ul><li>The raw text file must be fast to type up.</li><li>The output must be semantically correct HTML5 and be parseable by text-only browsers like <a href="https://en.wikipedia.org/wiki/Lynx_%28web_browser%29">Lynx</a> and accessibility tools. Users can apply whatever CSS styles as they wish.</li><li>In descending order of importance: it should be <em>simple</em>, <em>consistent</em>, <em>correct</em>. Compare with the <a href="http://en.wikipedia.org/wiki/Worse_is_better">“worse is better” approach</a>.</li></ul>
+<h2 id="comparison-to-other-languages"><span id="s1.2">Comparison to other languages</span></h2>
+<p>Why make <a href="http://xkcd.com/927/">yet another markup language</a> when there are already so many available? The answer is:</p>
+<ol><li>Just for fun.</li><li>I want several features not available in current markup languages, and I don’t need several features which are available in current markup languages.</li></ol>
+<p>Thus, this project is for my own personal use. That notwithstanding, here are comparisons to jemdoc and Markdown.</p>
+<h3 id="comparison-to-markdown"><span id="s1.2.1">Comparison to Markdown</span></h3>
+<p>There are several differences:</p>
+<ul><li><strong>dllup is much stricter</strong>. Markdown is designed to support a large variety of ways to format things in a text file. For example, an <code>&lt;h1&gt;</code> can be formatted in over three ways (prefix, both prefix and suffix, and “underline” of equal signs). In dllup, everything is done one way only. This is because I wrote my language with the intention of having only one user (myself), and I tend to prefer doing things consistently.</li><li><strong>dllup supports math equations</strong>. Many attempts exist to bolt on <a href="http://www.mathjax.org">MathJax</a> support to Markdown (see: <a href="http://docs.mathjax.org/en/latest/misc/mathjax-in-use.html">MathJax in use</a>). I have made the decision instead to render math as SVG on the serverside. There are pros and cons: the good thing is that this avoids the lengthy render time of MathJax, allows repeated equations to be cached, and works on browsers without Javascript. The bad thing is that it takes a bit more bandwidth to send a large SVG file (a few kB per equation) and there is no subpixel hinting.</li><li><strong>dllup supports captioned figures</strong>. Markdown only supports inline images, although it is possible to give it a kind of caption. dllup uses semantically correct HTML5 tags <code>&lt;figure&gt;</code> and <code>&lt;figcaption&gt;</code> instead.</li><li><strong>dllup does not implement several features</strong>, such as integration with publishing platforms (Markdown supports Movable Type), and things like automatic links, and so on.</li></ul>
+<p>There are also several similarities: the syntax for headers, links, lists, numbered lists, emphasis, and strong text are also valid Markdown. So, if you take a simple dllup document and put it into a markdown parser, there is a good chance it will be parsed correctly. The converse is not true in general.</p>
+<h3 id="comparison-to-jemdoc"><span id="s1.2.2">Comparison to Jemdoc</span></h3>
+<p>There are several differences:</p>
+<ul><li><strong>dllup equations are SVG</strong>. The equations in jemdoc were originally rasterized PNG images which wastes bandwidth, and looks horrible on retina screens, in print, or when zoomed in. But it should be noted there is a version of jemdoc which uses MathJax instead, with the same pros and cons as described in the previous section.</li><li><strong>dllup supports captioned figures</strong>. While jemdoc supports image blocks, it does not directly support the semantically correct <code>&lt;figure&gt;</code> caption since it targets XHTML 1.1 instead of HTML5.</li><li><strong>dllup does not implement several features</strong>. This includes other character sets, and so on. There are also no bibliographic reference packages for dllup.</li><li><strong>dllup is not as portable</strong>, as it requires external software to handle SVG equations.</li></ul>
+<p>There is a key similarity: the goal of maintaining personal webpages, especially in an academic setting, is identical.</p>
+<h1 id="syntax"><span id="s2">Syntax</span></h1>
+<h2 id="article-header"><span id="s2.1">Article header</span></h2>
+<p>If the document contains a line consisting of three equal signs, then everything before it will be considered the <strong>header</strong>. The first line of the header is the document title, and subsequent paragraphs (separated by an empty line) will show up as paragraphs. These paragraphs can be used for useful meta-data (such as the date of creation, tags, and so forth), but should not be used for actual content.</p>
+<p>Everything after the three equal signs will be body text, explained in the following sections.</p>
+<pre style="background-color: #FAFAFA; color: #282C34;">
+ dllup markup language
+
+ ===
+
+ # Introduction
+ 
+ **dllup** is a lightweight markup language...
+</pre>
+<h2 id="code"><span id="s2.2">Code</span></h2>
+<h3 id="raw-html"><span id="s2.2.1">Raw HTML</span></h3>
+<p>Separate raw HTML code from the rest of the document by lines consisting of <em>only</em> three question marks (no whitespace).</p>
+<pre style="background-color: #FAFAFA; color: #282C34;">
+ Blah blah.
+
+ ???
+ &lt;script&gt;
+ window.alert(&#x27;hi&#x27;);
+ &lt;&#x2f;script&gt;
+ ???
+
+ Blah blah blah.
+</pre>
+<h3 id="code-blocks"><span id="s2.2.2">Code blocks</span></h3>
+<p>A code block is separated from the rest of the document by lines consisting of <em>only</em> three or four tildes (no whitespace). Three tildes means the content will get syntax highlighted (automatic guess for syntax, unless the first line specifies the language by the word “lang” followed by the language name), and four tildes means the content wil not get syntax highlighted.</p>
+<pre style="background-color: #FAFAFA; color: #282C34;">
+ Blah blah.
+
+ ~~~
+ lang c++
+ #include &lt;iostream&gt;
+ int main() {
+     std::cout &lt;&lt; &quot;Hello world!&quot; &lt;&lt; endl;
+ }
+ ~~~
+
+ Blah blah blah.
+</pre>
+<p>For example,</p>
+<pre style="background-color: #FAFAFA; color: #282C34;">
+<span style="color: #651FFF; background-color: #FAFAFA;">#include</span> <span style="color: #24A443; background-color: #FAFAFA;">&lt;iostream&gt;</span>
+<span style="color: #FF6F00; background-color: #FAFAFA;">int</span> <span style="color: #282C34">main</span><span style="color: #795548; background-color: #FAFAFA;">(</span><span style="color: #795548; background-color: #FAFAFA;">)</span> <span style="color: #795548; background-color: #FAFAFA;">{</span>
+    <span style="color: #0061FF; background-color: #FAFAFA;">std</span><span style="color: #B500A9; background-color: #FAFAFA;">::</span><span style="color: #282C34">cout</span> <span style="color: #D50000; background-color: #FAFAFA;">&lt;&lt;</span> <span style="color: #24A443; background-color: #FAFAFA;">&quot;Hello world!&quot;</span> <span style="color: #D50000; background-color: #FAFAFA;">&lt;&lt;</span> <span style="color: #282C34">endl</span><span style="color: #B500A9; background-color: #FAFAFA;">;</span>
+<span style="color: #795548; background-color: #FAFAFA;">}</span>
+</pre>
+<h2 id="block-elements"><span id="s2.3">Block elements</span></h2>
+<p>All block elements are separated by at least one empty line. For example there must be an empty line between a header and the paragraph that follows it. This behaviour is similar to LaTeX and allows you to use hard wraps (i.e. line breaks) to enforce a maximum line length.</p>
+<h3 id="section-headers"><span id="s2.3.1">Section headers</span></h3>
+<p>Headers are specified by preceding octothorpes, up to six. These will show up in the Table of Contents, which appears in the article header. Using more than three levels of section headers is not recommended.</p>
+<pre style="background-color: #FAFAFA; color: #282C34;">
+# This is a first level header
+
+## This is a second level header
+
+### This is a third level header
+that is very, very long
+
+###### This is a sixth level header
+</pre>
+<h3 id="blockquotes"><span id="s2.3.2">Blockquotes</span></h3>
+<p>Blockquotes are preceded by a greater than symbol.</p>
+<pre style="background-color: #FAFAFA; color: #282C34;">
+&gt; The quick brown fox jumps over the lazy dog and
+also jumps over the lazy cat.
+</pre>
+<p>This gets rendered as:</p>
+<blockquote>The quick brown fox jumps over the lazy dog and
+</blockquote>
+<p>also jumps over the lazy cat.</p>
+<h3 id="images"><span id="s2.3.3">Images</span></h3>
+<p>Images are captioned figures by default and consist of the word “pic”, the URL, the alt tag, a colon with spaces on either side, and the caption. All fields are required. You can put multiple images in the same block, one on each line.</p>
+<pre style="background-color: #FAFAFA; color: #282C34;">
+pic http:&#x2f;&#x2f;i.imgur.com&#x2f;WpEUM8S.jpg Ghost, a novelty chess set : _Ghost_ is a novelty chess set I designed which looks cool but is totally impractical for playing. The pieces are very flat and can be stacked together for compact storage.
+</pre>
+<p>This gets rendered as:</p>
+<figure id="fig1" class="wide"><a href="file:///home/dllu/proj/dllup-rs/img/WpEUM8S.jpg"><picture><source media="(max-width: 600px)" srcset="file:///home/dllu/proj/dllup-rs/img/WpEUM8S-600.jpg 600w" type="image/jpeg"/><img src="file:///home/dllu/proj/dllup-rs/img/WpEUM8S.jpg" alt="Ghost, a novelty chess set" width="1200" height="480" loading="lazy" decoding="async" srcset="file:///home/dllu/proj/dllup-rs/img/WpEUM8S-600.jpg 600w, file:///home/dllu/proj/dllup-rs/img/WpEUM8S.jpg 1200w" sizes="100vw"/></picture></a><figcaption><p><a href="#fig1" class="fignum">FIGURE 1</a> <em>Ghost</em> is a novelty chess set I designed which looks cool but is totally impractical for playing. The pieces are very flat and can be stacked together for compact storage.</p><ul aria-label="download sizes"><li><a href="file:///home/dllu/proj/dllup-rs/img/WpEUM8S-600.jpg">600 × 240</a></li><li><a href="file:///home/dllu/proj/dllup-rs/img/WpEUM8S.jpg">original 1200 × 480</a></li></ul></figcaption></figure>
+<h3 id="display-math-equations"><span id="s2.3.4">Display math equations</span></h3>
+<p>Display math equations are preceded by a dollar sign.</p>
+<pre style="background-color: #FAFAFA; color: #282C34;">
+$ x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
+</pre>
+<p>This gets rendered as:</p>
+<div class="math" id="eq1"><a href="#eq1" class="eqnum">1</a> <span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mtable rowspacing="0.25em" columnalign="right" columnspacing=""><mtr><mtd><mstyle scriptlevel="0" displaystyle="true"><mrow><mi>x</mi><mo>=</mo><mfrac><mrow><mo>−</mo><mi>b</mi><mo>±</mo><msqrt><mrow><msup><mi>b</mi><mn>2</mn></msup><mo>−</mo><mn>4</mn><mi>a</mi><mi>c</mi></mrow></msqrt></mrow><mrow><mn>2</mn><mi>a</mi></mrow></mfrac></mrow></mstyle></mtd></mtr></mtable><annotation encoding="application/x-tex">\begin{aligned}x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}\end{aligned}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:2.5764em;vertical-align:-1.0382em;"></span><span class="mord"><span class="mtable"><span class="col-align-r"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.5382em;"><span style="top:-3.5382em;"><span class="pstrut" style="height:3.5904em;"></span><span class="mord"><span class="mord mathnormal">x</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.5904em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">2</span><span class="mord mathnormal">a</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">−</span><span class="mord mathnormal">b</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">±</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord sqrt"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.9134em;"><span class="svg-align" style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord" style="padding-left:0.833em;"><span class="mord"><span class="mord mathnormal">b</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7401em;"><span style="top:-2.989em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">4</span><span class="mord mathnormal">a</span><span class="mord mathnormal">c</span></span></span><span style="top:-2.8734em;"><span class="pstrut" style="height:3em;"></span><span class="hide-tail" style="min-width:0.853em;height:1.08em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="1.08em" viewBox="0 0 400000 1080" preserveAspectRatio="xMinYMin slice"><path d="M95,702
+c-2.7,0,-7.17,-2.7,-13.5,-8c-5.8,-5.3,-9.5,-10,-9.5,-14
+c0,-2,0.3,-3.3,1,-4c1.3,-2.7,23.83,-20.7,67.5,-54
+c44.2,-33.3,65.8,-50.3,66.5,-51c1.3,-1.3,3,-2,5,-2c4.7,0,8.7,3.3,12,10
+s173,378,173,378c0.7,0,35.3,-71,104,-213c68.7,-142,137.5,-285,206.5,-429
+c69,-144,104.5,-217.7,106.5,-221
+l0 -0
+c5.3,-9.3,12,-14,20,-14
+H400000v40H845.2724
+s-225.272,467,-225.272,467s-235,486,-235,486c-2.7,4.7,-9,7,-19,7
+c-6,0,-10,-1,-12,-3s-194,-422,-194,-422s-65,47,-65,47z
+M834 80h400000v40h-400000z"/></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1266em;"><span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.0382em;"><span></span></span></span></span></span></span></span></span></span></span></span></div>
+<h3 id="lists"><span id="s2.3.5">Lists</span></h3>
+<p>Lists are preceded by an asterisk or a number followed by a dot.</p>
+<pre style="background-color: #FAFAFA; color: #282C34;">
+* Item one.
+* Item two.
+Multi-line list item.
+** Nested.
+*** More nested.
+** Nested.
+* Item 3.
+
+1. Item one
+99. Item ninety-nine? Nah it&#x27;s actually item two.
+</pre>
+<p>This gets rendered as:</p>
+<ul><li>Item one.</li><li>Item two. Multi-line list item.<ul><li>Nested.<ul><li>More nested.</li></ul></li><li>Nested.</li></ul></li><li>Item 3.</li></ul>
+<ol><li>Item one</li><li>Item ninety-nine? Nah it’s actually item two.</li></ol>
+<p>Nesting is supported only for unordered lists, but not for ordered ones. The first number of a numbered list must be 1, although for the remaining list items any number works.</p>
+<h3 id="tables"><span id="s2.3.6">Tables</span></h3>
+<p>Tables consist of rows where columns are separated by the vertical pipe.</p>
+<pre style="background-color: #FAFAFA; color: #282C34;">
+| Puppy colour | Awesome? | Purpleness |
+| ------------ | -------- | ---------- |
+| Red          | $\times$ | 0.1        |
+| Orange       | $\times$ | 0          |
+| Yellow       | $\times$ | 0          |
+| Green        | $\times$ | 0          |
+| Blue         | $\times$ | 0.5        |
+| Purple       | $\checkmark$ | 1      |
+Summary of the awesomeness of puppy colours.
+</pre>
+<p>This gets rendered as:</p>
+<figure id="table1"><table><tr><th>Puppy colour</th><th>Awesome?</th><th>Purpleness</th></tr><tr><td>————</td><td>——–</td><td>———-</td></tr><tr><td>Red</td><td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>×</mo></mrow><annotation encoding="application/x-tex">\times</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord">×</span></span></span></span></td><td>0.1</td></tr><tr><td>Orange</td><td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>×</mo></mrow><annotation encoding="application/x-tex">\times</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord">×</span></span></span></span></td><td>0</td></tr><tr><td>Yellow</td><td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>×</mo></mrow><annotation encoding="application/x-tex">\times</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord">×</span></span></span></span></td><td>0</td></tr><tr><td>Green</td><td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>×</mo></mrow><annotation encoding="application/x-tex">\times</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord">×</span></span></span></span></td><td>0</td></tr><tr><td>Blue</td><td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>×</mo></mrow><annotation encoding="application/x-tex">\times</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord">×</span></span></span></span></td><td>0.5</td></tr><tr><td>Purple</td><td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="normal">✓</mi></mrow><annotation encoding="application/x-tex">\checkmark</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6922em;"></span><span class="mord amsrm">✓</span></span></span></span></td><td>1</td></tr></table><figcaption><a href="#table1" class="fignum">Table 1</a> Summary of the awesomeness of puppy colours.</figcaption></figure>
+<p>The first line is always interpreted as a header. A row consisting of only <code>|</code>, <code>-</code>, and whitespace is ignored. The vertical pipes don’t need to line up and extra whitespace is discarded. The last line is always interpreted as a table caption.</p>
+<h3 id="big-button"><span id="s2.3.7">Big button</span></h3>
+<p>A big button is useful in case you want to link to an important page, or a link to download something, or to perform a critical action.</p>
+<pre style="background-color: #FAFAFA; color: #282C34;">
+:: big button http:&#x2f;&#x2f;www.dllu.net&#x2f;
+</pre>
+<p>This gets rendered as:</p>
+<p><a href="http://www.dllu.net/" class="bigbutton">big button</a></p>
+<h3 id="paragraph"><span id="s2.3.8">Paragraph</span></h3>
+<p>A block with none of the keywords/symbols in front counts as just a paragraph.</p>
+<h2 id="inline-elements"><span id="s2.4">Inline elements</span></h2>
+<p>Inline elements, or <em>span</em> elements, apply to any kind of normal text such as paragraph text, header text, caption text, list content, and so on. But they do not apply to math equations or source code. Here are the types of elements processed in order of precedence.</p>
+<h3 id="monospace-code-snippet"><span id="s2.4.1">Monospace code snippet</span></h3>
+<p>A <code>monospace code snippet</code> comes between backticks.</p>
+<pre style="background-color: #FAFAFA; color: #282C34;">
+A `monospace code snippet` comes between backticks.
+</pre>
+<h3 id="inline-math"><span id="s2.4.2">Inline math</span></h3>
+<p>Inline mathematics <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>y</mi><mo>=</mo><mi>m</mi><mi>x</mi><mo>+</mo><mi>b</mi></mrow><annotation encoding="application/x-tex">y = mx + b</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.03588em;">y</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">m</span><span class="mord mathnormal">x</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal">b</span></span></span></span> comes between dollar signs.</p>
+<pre style="background-color: #FAFAFA; color: #282C34;">
+Inline mathematics $y = mx + b$ comes between dollar signs.
+</pre>
+<h3 id="links"><span id="s2.4.3">Links</span></h3>
+<p>Links follow <a href="http://daringfireball.net/projects/markdown/basics">the Markdown syntax</a>.</p>
+<pre style="background-color: #FAFAFA; color: #282C34;">
+Links follow [the Markdown syntax](http:&#x2f;&#x2f;daringfireball.net&#x2f;projects&#x2f;markdown&#x2f;basics).
+</pre>
+<h3 id="emphasis-and-strong"><span id="s2.4.4">Emphasis and strong</span></h3>
+<p>Text is <em>emphasized</em> or made <strong>strong</strong> by underscores and double asterisks.</p>
+<pre style="background-color: #FAFAFA; color: #282C34;">
+Text is _emphasized_ or made **strong** by underscores and double asterisks.
+</pre>
+<h3 id="references"><span id="s2.4.5">References</span></h3>
+<p>Referring to or citing things is done using <code>(#asdf)</code>, for example (#fig1)(#eq1)(#s2.4.5)(#asdf). A reference list is similar to a regular unordered list, except each element starts with  <code>* [#asdf]</code>, like this:</p>
+<ul><li>[#asdf] Lu, Daniel. “dllup markup language”.</li></ul>
+<pre style="background-color: #FAFAFA; color: #282C34;">
+Referring to or citing things is done using `(#asdf)`, for example (#fig1)(#eq1)(#s2.4.5)(#asdf). A reference can be created as `* [#asdf]`, like this:
+
+* [#asdf] Lu, Daniel. &quot;dllup markup language&quot;.
+</pre>
+<h2 id="typographical-character-substitutions"><span id="s2.5">Typographical character substitutions</span></h2>
+<p>dllup makes automatic substitutions:</p>
+<ul><li>Real quotation marks that look like “66” and “99” instead of straight quotation marks.</li><li>Real single quotation marks and apostrophes that look like ‘6’ and ‘9’.</li><li>Dashes — em dashes for breaking sentences, and en dashes for ranges like A–Z.</li><li>Ellipses…</li></ul>
+<h3 id="special-character-escaping"><span id="s2.5.1">Special character escaping</span></h3>
+<p>You can escape special characters using backslashes.</p>
+<p>The dollar sign “$”, backtick “`”, for example, should be escaped as <code>\$</code> and <code>`</code> respectively if you wish to use them in prose.</p>
+<h1 id="implementation"><span id="s3">Implementation</span></h1>
+<p>dllup is implemented in <a href="https://www.python.org/">Python 3</a>. It is fewer than 250 lines of Python, most of which are one-line functions (compare with Markdown which is 1400 lines of Perl and jemdoc which is 1400 lines of Python).</p>
+<p>The Python code aims to be concise and does not contain html information about the header and footer of the document.</p>
+<p>For rendering math equations, dllup uses <a href="https://github.com/mathjax/mathjax-node-cli">mathjax-node-cli</a> to create SVG files.</p>
+<p>For syntax highlighting, dllup uses <a href="http://pygments.org/">Pygments</a>.</p>
+<p>The source code of dllup is available on <a href="https://github.com/dllu/dllup">GitHub</a> under the MIT license.</p>
+<h1 id="installation"><span id="s4">Installation</span></h1>
+<h2 id="dllup-to-html"><span id="s4.1">dllup to html</span></h2>
+<p>Using dllup is straightforward, but it is not as portable as jemdoc and not as polished. As such it will not check for dependencies and will simply crash if you do not set up your system exactly as described.</p>
+<p>The parser is a single Python script that you can download here:</p>
+<p><a href="https://github.com/dllu/dllup/blob/main/dllup.py" class="bigbutton">Download dllup</a></p>
+<ul><li>Install <a href="http://pygments.org/">Pygments</a></li><li>Install <a href="https://www.npmjs.com/package/mathjax-node-cli">mathjax-node-cli</a></li></ul>
+<h3 id="compiling-a-single-file"><span id="s4.1.1">Compiling a single file</span></h3>
+<p>To run, <code>dllup.py</code> does input and output on standard IO. By default it creates svg files for equations in a folder <code>site/texcache</code>.</p>
+<pre style="background-color: #FAFAFA; color: #282C34;">
+mkdir site&#x2f;texcache
+.&#x2f;dllup.py &lt; site&#x2f;index.dllu &gt; site&#x2f;index.html
+</pre>
+<p>In Python you can also import dllup as a module:</p>
+<pre style="background-color: #FAFAFA; color: #282C34;">
+<span style="color: #5C6370; background-color: #FAFAFA;font-style: italic;">#!&#x2f;usr&#x2f;bin&#x2f;python</span>
+
+<span style="color: #D50000; background-color: #FAFAFA;">import</span> <span style="color: #282C34">dllup</span>
+
+<span style="color: #282C34">s</span> <span style="color: #D50000; background-color: #FAFAFA;">=</span> <span style="color: #24A443; background-color: #FAFAFA;">&quot;&quot;&quot;Example
+
+===
+
+# Hi
+
+The quick brown fox jumps over the lazy dog.&quot;&quot;&quot;</span>
+
+<span style="color: #282C34">print</span><span style="color: #795548; background-color: #FAFAFA;">(</span><span style="color: #282C34">dllup</span><span style="color: #B500A9; background-color: #FAFAFA;">.</span><span style="color: #282C34">parse</span><span style="color: #795548; background-color: #FAFAFA;">(</span><span style="color: #282C34">s</span><span style="color: #795548; background-color: #FAFAFA;">)</span><span style="color: #795548; background-color: #FAFAFA;">)</span>
+</pre>
+<h2 id="dllup-to-latex"><span id="s4.2">dllup to LaTeX</span></h2>
+<p>All you need is a working LaTeX installation and the following Python 3 script.</p>
+<p><a href="https://github.com/dllu/dllup/blob/main/dlluptex.py" class="bigbutton">Download dlluptex</a></p>
+<p>The output can be included in any LaTeX document, like so</p>
+<pre style="background-color: #FAFAFA; color: #282C34;">
+<span style="color: #0086C1; background-color: #FAFAFA;">\begin</span><span style="color: #795548; background-color: #FAFAFA;">{</span><span style="color: #C2185B; background-color: #FAFAFA;font-weight: bold;">document</span><span style="color: #795548; background-color: #FAFAFA;">}</span>
+<span style="color: #D50000; background-color: #FAFAFA;">\input</span><span style="color: #24A443; background-color: #FAFAFA;"><span style="color: #795548; background-color: #FAFAFA;">{</span>index_dllu.tex<span style="color: #795548; background-color: #FAFAFA;">}</span></span>
+<span style="color: #0086C1; background-color: #FAFAFA;">\end</span><span style="color: #795548; background-color: #FAFAFA;">{</span><span style="color: #C2185B; background-color: #FAFAFA;font-weight: bold;">document</span><span style="color: #795548; background-color: #FAFAFA;">}</span>
+</pre>
+<p>I recommend my own <a href="https://github.com/dllu/dllup/blob/main/texheader.tex">LaTeX headers and template</a>. For example, see <a href="index.pdf">this documentation page rendered in LaTeX (pdf)</a> and the <a href="index_dllu.tex">raw .tex output</a>.</p>
+<h3 id="compiling-a-single-file-2"><span id="s4.2.1">Compiling a single file</span></h3>
+<p>Usage is the same as for html, but easier.</p>
+<pre style="background-color: #FAFAFA; color: #282C34;">
+.&#x2f;dlluptex.py &lt; index.dllu &gt; index_dllu.tex
+pdflatex texheader.tex
+pdflatex texheader.tex
+</pre>
+<h2 id="syntax-highlighting"><span id="s4.3">Syntax highlighting</span></h2>
+<p>There is experimental syntax highlighting support for vim.</p>
+<figure id="fig2"><a href="gdTcORo.png"><picture><img src="gdTcORo.png" alt="vim syntax highlighting example" width="600" height="600" loading="lazy" decoding="async"/></picture></a><figcaption><p><a href="#fig2" class="fignum">FIGURE 2</a> Syntax highlighting example in vim.</p><ul aria-label="download sizes"><li><a href="gdTcORo.png">original</a></li></ul></figcaption></figure>
+<p>It is modified from the Markdown vim syntax file maintained by Tim Pope.</p>
+<p><a href="https://github.com/dllu/dllup/blob/main/dllup.vim" class="bigbutton">Download vim syntax</a></p>
+<h1 id="faq"><span id="s5">FAQ</span></h1>
+<blockquote>Certain features don’t work in my browser.
+</blockquote>
+<p>The output of dllup has been W3C validated and tested in the latest versions of Firefox, Google Chrome, and even <a href="https://en.wikipedia.org/wiki/Lynx_%28web_browser%29">Lynx</a>. No attempt shall be made to support other browsers, although you are free to extend dllup as you please.</p>
+<blockquote>Why SVG math instead of MathJax or KaTeX?
+</blockquote>
+<p>MathJax is slow, causes page content to jump around as math is being rendered, and may freeze the browser on old hardware or slow browsers. KaTeX does not support critical math entities such as matrices. Saving math equations as SVG files also allows the SVG files to be cached in case a single equation shows up many times. Some users also prefer to disable Javascript for privacy reasons even when they are using a modern browser that supports SVG images.</p>
+<blockquote>Where can I find an example of a dllup file?
+</blockquote>
+<p>This <a href="index.dllu">documentation itself was written in dllup</a>.</p>
+<blockquote>The parser crashed.
+</blockquote>
+<p>This can be due to a syntax error in the input. The dllup markup language is stricter than Markdown and has some syntax that is not obvious to people other than myself.</p>
+
+
+</main>
+</body>
+</html>

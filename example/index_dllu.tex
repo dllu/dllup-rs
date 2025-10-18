@@ -1,0 +1,414 @@
+% LaTeX document generated using dllup. www.dllu.net/programming/dllup/
+\title{dllup markup language\\y2015m03d12}
+\maketitle
+\section{Introduction}
+\label{s1}
+\textbf{dllup} is a \href{https://en.wikipedia.org/wiki/Lightweight_markup_language}{lightweight markup language} designed for creating simple websites. It is a way to write an easily readable text file which the dllup parser turns into a static HTML page, or a LaTeX document. This document will cover the use of dllup to produce HTML webpages.
+
+The name ``dllup'' is a portmanteau of my username and ``markup''. It was inspired by \href{http://jemdoc.jaboc.net/}{jemdoc} and \href{http://daringfireball.net/projects/markdown/}{markdown}. It supports LaTeX equations, tables, figure captioning,  syntax highlighting of source code, and automatic section numbering with table of contents. However, it lacks many other features as it is deliberately simple.
+
+\subsection{Philosophy}
+\label{s1.1}
+\begin{itemize}\item The raw text file must be fast to type up.
+\item The output must be semantically correct HTML5 and be parseable by text-only browsers like \href{https://en.wikipedia.org/wiki/Lynx_%28web_browser%29}{Lynx} and accessibility tools. Users can apply whatever CSS styles as they wish.
+\item In descending order of importance: it should be \emph{simple}, \emph{consistent}, \emph{correct}. Compare with the \href{http://en.wikipedia.org/wiki/Worse_is_better}{``worse is better'' approach}.
+\end{itemize}
+\subsection{Comparison to other languages}
+\label{s1.2}
+Why make \href{http://xkcd.com/927/}{yet another markup language} when there are already so many available? The answer is:
+
+\begin{enumerate}
+\item Just for fun.
+\item I want several features not available in current markup languages, and I don't need several features which are available in current markup languages.
+\end{enumerate}
+Thus, this project is for my own personal use. That notwithstanding, here are comparisons to jemdoc and Markdown.
+
+\subsubsection{Comparison to Markdown}
+\label{s1.2.1}
+There are several differences:
+
+\begin{itemize}\item \textbf{dllup is much stricter}. Markdown is designed to support a large variety of ways to format things in a text file. For example, an \texttt{<h1>} can be formatted in over three ways (prefix, both prefix and suffix, and ``underline'' of equal signs). In dllup, everything is done one way only. This is because I wrote my language with the intention of having only one user (myself), and I tend to prefer doing things consistently.
+\item \textbf{dllup supports math equations}. Many attempts exist to bolt on \href{http://www.mathjax.org}{MathJax} support to Markdown (see: \href{http://docs.mathjax.org/en/latest/misc/mathjax-in-use.html}{MathJax in use}). I have made the decision instead to render math as SVG on the serverside. 
+There are pros and cons: the good thing is that this avoids the lengthy render time of MathJax, allows repeated equations to be cached, and works on browsers without Javascript. The bad thing is that it takes a bit more bandwidth to send a large SVG file (a few kB per equation) and there is no subpixel hinting.
+\item \textbf{dllup supports captioned figures}. Markdown only supports inline images, although it is possible to give it a kind of caption. dllup uses semantically correct HTML5 tags \texttt{<figure>} and \texttt{<figcaption>} instead.
+\item \textbf{dllup does not implement several features}, such as integration with publishing platforms (Markdown supports Movable Type), and things like automatic links, and so on.
+\end{itemize}
+There are also several similarities: the syntax for headers, links, lists, numbered lists, emphasis, and strong text are also valid Markdown. So, if you take a simple dllup document and put it into a markdown parser, there is a good chance it will be parsed correctly. The converse is not true in general.
+
+\subsubsection{Comparison to Jemdoc}
+\label{s1.2.2}
+There are several differences:
+
+\begin{itemize}\item \textbf{dllup equations are SVG}. The equations in jemdoc were originally rasterized PNG images which wastes bandwidth, and looks horrible on retina screens, in print, or when zoomed in. But it should be noted there is a version of jemdoc which uses MathJax instead, with the same pros and cons as described in the previous section.
+\item \textbf{dllup supports captioned figures}. While jemdoc supports image blocks, it does not directly support the semantically correct \texttt{<figure>} caption since it targets XHTML 1.1 instead of HTML5.
+\item \textbf{dllup does not implement several features}. This includes other character sets, and so on. There are also no bibliographic reference packages for dllup.
+\item \textbf{dllup is not as portable}, as it requires external software to handle SVG equations.
+\end{itemize}
+There is a key similarity: the goal of maintaining personal webpages, especially in an academic setting, is identical.
+
+\section{Syntax}
+\label{s2}
+\subsection{Article header}
+\label{s2.1}
+If the document contains a line consisting of three equal signs, then everything before it will be considered the \textbf{header}. The first line of the header is the document title, and subsequent paragraphs (separated by an empty line) will show up as paragraphs. These paragraphs can be used for useful meta-data (such as the date of creation, tags, and so forth), but should not be used for actual content.
+
+Everything after the three equal signs will be body text, explained in the following sections.
+
+\begin{lstlisting}
+ dllup markup language
+
+ ===
+
+ # Introduction
+ 
+ **dllup** is a lightweight markup language...
+\end{lstlisting}
+\subsection{Code}
+\label{s2.2}
+\subsubsection{Raw HTML}
+\label{s2.2.1}
+Separate raw HTML code from the rest of the document by lines consisting of \emph{only} three question marks (no whitespace).
+
+\begin{lstlisting}
+ Blah blah.
+
+ ???
+ <script>
+ window.alert('hi');
+ </script>
+ ???
+
+ Blah blah blah.
+\end{lstlisting}
+\subsubsection{Code blocks}
+\label{s2.2.2}
+A code block is separated from the rest of the document by lines consisting of \emph{only} three or four tildes (no whitespace). Three tildes means the content will get syntax highlighted (automatic guess for syntax, unless the first line specifies the language by the word ``lang'' followed by the language name), and four tildes means the content wil not get syntax highlighted.
+
+\begin{lstlisting}
+ Blah blah.
+
+ ~~~
+ lang c++
+ #include <iostream>
+ int main() {
+     std::cout << "Hello world!" << endl;
+ }
+ ~~~
+
+ Blah blah blah.
+\end{lstlisting}
+For example,
+
+\begin{lstlisting}[language=c++]
+#include <iostream>
+int main() {
+    std::cout << "Hello world!" << endl;
+}
+\end{lstlisting}
+\subsection{Block elements}
+\label{s2.3}
+All block elements are separated by at least one empty line. For example there must be an empty line between a header and the paragraph that follows it. This behaviour is similar to LaTeX and allows you to use hard wraps (i.e. line breaks) to enforce a maximum line length.
+
+\subsubsection{Section headers}
+\label{s2.3.1}
+Headers are specified by preceding octothorpes, up to six. These will show up in the Table of Contents, which appears in the article header. Using more than three levels of section headers is not recommended.
+
+\begin{lstlisting}
+# This is a first level header
+
+## This is a second level header
+
+### This is a third level header
+that is very, very long
+
+###### This is a sixth level header
+\end{lstlisting}
+\subsubsection{Blockquotes}
+\label{s2.3.2}
+Blockquotes are preceded by a greater than symbol.
+
+\begin{lstlisting}
+> The quick brown fox jumps over the lazy dog and
+also jumps over the lazy cat.
+\end{lstlisting}
+This gets rendered as:
+
+\begin{quote}
+The quick brown fox jumps over the lazy dog and
+also jumps over the lazy cat.\end{quote}
+\subsubsection{Images}
+\label{s2.3.3}
+Images are captioned figures by default and consist of the word ``pic'', the URL, the alt tag, a colon with spaces on either side, and the caption. All fields are required. You can put multiple images in the same block, one on each line.
+
+\begin{lstlisting}
+pic http://i.imgur.com/WpEUM8S.jpg Ghost, a novelty chess set : _Ghost_ is a novelty chess set I designed which looks cool but is totally impractical for playing. The pieces are very flat and can be stacked together for compact storage.
+\end{lstlisting}
+This gets rendered as:
+
+\begin{figure}[htb]
+\centering
+\includegraphics[width=0.5\textwidth]{WpEUM8S.jpg}
+\caption{\emph{Ghost} is a novelty chess set I designed which looks cool but is totally impractical for playing. The pieces are very flat and can be stacked together for compact storage.}
+\label{fig1}
+\end{figure}
+\subsubsection{Display math equations}
+\label{s2.3.4}
+Display math equations are preceded by a dollar sign.
+
+\begin{lstlisting}
+$ x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
+\end{lstlisting}
+This gets rendered as:
+
+\begin{align}
+\label{eq1}
+x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}\end{align}
+\subsubsection{Lists}
+\label{s2.3.5}
+Lists are preceded by an asterisk or a number followed by a dot.
+
+\begin{lstlisting}
+* Item one.
+* Item two.
+Multi-line list item.
+** Nested.
+*** More nested.
+** Nested.
+* Item 3.
+
+1. Item one
+99. Item ninety-nine? Nah it's actually item two.
+\end{lstlisting}
+This gets rendered as:
+
+\begin{itemize}\item Item one.
+\item Item two.
+Multi-line list item.\begin{itemize}\item Nested.\begin{itemize}\item More nested.
+\end{itemize}
+
+\item Nested.
+\end{itemize}
+
+\item Item 3.
+\end{itemize}
+\begin{enumerate}
+\item Item one
+\item Item ninety-nine? Nah it's actually item two.
+\end{enumerate}
+Nesting is supported only for unordered lists, but not for ordered ones. The first number of a numbered list must be 1, although for the remaining list items any number works.
+
+\subsubsection{Tables}
+\label{s2.3.6}
+Tables consist of rows where columns are separated by the vertical pipe.
+
+\begin{lstlisting}
+| Puppy colour | Awesome? | Purpleness |
+| ------------ | -------- | ---------- |
+| Red          | $\times$ | 0.1        |
+| Orange       | $\times$ | 0          |
+| Yellow       | $\times$ | 0          |
+| Green        | $\times$ | 0          |
+| Blue         | $\times$ | 0.5        |
+| Purple       | $\checkmark$ | 1      |
+Summary of the awesomeness of puppy colours.
+\end{lstlisting}
+This gets rendered as:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{cccccccccccccccccccccccccccccccccccccccc}
+Puppy colour & Awesome? & Purpleness\\ \hline
+Red & $\times$ & 0.1\\
+Orange & $\times$ & 0\\
+Yellow & $\times$ & 0\\
+Green & $\times$ & 0\\
+Blue & $\times$ & 0.5\\
+Purple & $\checkmark$ & 1\\
+\end{tabular}
+\caption{Summary of the awesomeness of puppy colours.}
+\label{table1}\end{table}The first line is always interpreted as a header. A row consisting of only \texttt{|}, \texttt{-}, and whitespace is ignored. The vertical pipes don't need to line up and extra whitespace is discarded. The last line is always interpreted as a table caption.
+
+\subsubsection{Big button}
+\label{s2.3.7}
+A big button is useful in case you want to link to an important page, or a link to download something, or to perform a critical action.
+
+\begin{lstlisting}
+:: big button http://www.dllu.net/
+\end{lstlisting}
+This gets rendered as:
+
+\begin{center}\huge \href{http://www.dllu.net/}{big button}\end{center}
+\subsubsection{Paragraph}
+\label{s2.3.8}
+A block with none of the keywords/symbols in front counts as just a paragraph.
+
+\subsection{Inline elements}
+\label{s2.4}
+Inline elements, or \emph{span} elements, apply to any kind of normal text such as paragraph text, header text, caption text, list content, and so on. But they do not apply to math equations or source code. Here are the types of elements processed in order of precedence.
+
+\subsubsection{Monospace code snippet}
+\label{s2.4.1}
+A \texttt{monospace code snippet} comes between backticks.
+
+\begin{lstlisting}
+A `monospace code snippet` comes between backticks.
+\end{lstlisting}
+\subsubsection{Inline math}
+\label{s2.4.2}
+Inline mathematics $y = mx + b$ comes between dollar signs.
+
+\begin{lstlisting}
+Inline mathematics $y = mx + b$ comes between dollar signs.
+\end{lstlisting}
+\subsubsection{Links}
+\label{s2.4.3}
+Links follow \href{http://daringfireball.net/projects/markdown/basics}{the Markdown syntax}.
+
+\begin{lstlisting}
+Links follow [the Markdown syntax](http://daringfireball.net/projects/markdown/basics).
+\end{lstlisting}
+\subsubsection{Emphasis and strong}
+\label{s2.4.4}
+Text is \emph{emphasized} or made \textbf{strong} by underscores and double asterisks.
+
+\begin{lstlisting}
+Text is _emphasized_ or made **strong** by underscores and double asterisks.
+\end{lstlisting}
+\subsubsection{References}
+\label{s2.4.5}
+Referring to or citing things is done using \texttt{(\#asdf)}, for example (fig~\ref{fig1})(eq~\ref{eq1})(s~\ref{s2.4.5})\cite{asdf}. A reference list is similar to a regular unordered list, except each element starts with  \texttt{* [\#asdf]}, like this:
+
+\begin{thebibliography}{99}
+\bibitem{asdf} Lu, Daniel. ``dllup markup language''.
+\end{thebibliography}\begin{lstlisting}
+Referring to or citing things is done using `(#asdf)`, for example (#fig1)(#eq1)(#s2.4.5)(#asdf). A reference can be created as `* [#asdf]`, like this:
+
+* [#asdf] Lu, Daniel. "dllup markup language".
+\end{lstlisting}
+\subsection{Typographical character substitutions}
+\label{s2.5}
+dllup makes automatic substitutions:
+
+\begin{itemize}\item Real quotation marks that look like ``66'' and ``99'' instead of straight quotation marks.
+\item Real single quotation marks and apostrophes that look like `6' and `9'.
+\item Dashes --- em dashes for breaking sentences, and en dashes for ranges like A--Z.
+\item Ellipses...
+\end{itemize}
+\subsubsection{Special character escaping}
+\label{s2.5.1}
+You can escape special characters using backslashes.
+
+The dollar sign ``\$'', backtick ``\`'', for example, should be escaped as \texttt{\$} and \texttt{\`} respectively if you wish to use them in prose.
+
+\section{Implementation}
+\label{s3}
+dllup is implemented in \href{https://www.python.org/}{Python 3}. It is fewer than 250 lines of Python, most of which are one-line functions (compare with Markdown which is 1400 lines of Perl and jemdoc which is 1400 lines of Python).
+
+The Python code aims to be concise and does not contain html information about the header and footer of the document.
+
+For rendering math equations, dllup uses \href{https://github.com/linuxfrorg/svgtex}{svgtex} which uses \href{http://www.mathjax.org/}{MathJax} through \href{http://phantomjs.org/}{PhantomJS}.
+
+For syntax highlighting, dllup uses \href{http://pygments.org/}{Pygments}.
+
+The source code of dllup is available on \href{https://bitbucket.org/dllu/dllup/}{Bitbucket} under the MIT license.
+
+\section{Installation}
+\label{s4}
+\subsection{dllup to html}
+\label{s4.1}
+Using dllup is straightforward, but it is not as portable as jemdoc and not as polished. As such it will not check for dependencies and will simply crash if you do not set up your system exactly as described.
+
+The parser is a single Python script that you can download here:
+
+\begin{center}\huge \href{https://bitbucket.org/dllu/dllup/raw/master/dllup.py}{Download dllup}\end{center}
+\begin{itemize}\item Install \href{http://phantomjs.org/}{PhantomJS}
+\item Install \href{http://pygments.org/}{Pygments}
+\item Git clone \href{https://github.com/linuxfrorg/svgtex}{svgtex} to some directory
+\end{itemize}
+Ensure that you are using Python 3 (you can type \texttt{python --version} on the command line). Start running svgtex in the background before running dllup:
+
+\begin{lstlisting}
+phantomjs main.js
+\end{lstlisting}
+Ensure that svgtex is set up to listen to port 16000.
+
+\subsubsection{Compiling a single file}
+\label{s4.1.1}
+To run, \texttt{dllup.py} does input and output on standard IO. By default it creates svg files for equations in a folder \texttt{site/texcache}.
+
+\begin{lstlisting}
+mkdir site/texcache
+./dllup.py < site/index.dllu > site/index.html
+\end{lstlisting}
+In Python you can also import dllup as a module:
+
+\begin{lstlisting}[language=python]
+#!/usr/bin/python
+
+import dllup
+
+s = """Example
+
+===
+
+# Hi
+
+The quick brown fox jumps over the lazy dog."""
+
+print(dllup.parse(s))
+\end{lstlisting}
+\subsection{dllup to LaTeX}
+\label{s4.2}
+Compiling dllup to LaTeX is easier since it doesn't require svgtex, phantomjs, or pygments. All you need is a working LaTeX installation and the following Python 3 script.
+
+\begin{center}\huge \href{https://bitbucket.org/dllu/dllup/raw/master/dlluptex.py}{Download dlluptex}\end{center}
+The output can be included in any LaTeX document, like so
+
+\begin{lstlisting}[language=tex]
+\begin{document}
+\input{index_dllu.tex}
+\end{document}
+\end{lstlisting}
+I recommend my own \href{https://bitbucket.org/dllu/dllup/raw/master/texheader.tex}{LaTeX headers and template}. For example, see \href{index.pdf}{this documentation page rendered in LaTeX (pdf)} and the \href{index_dllu.tex}{raw .tex output}.
+
+\subsubsection{Compiling a single file}
+\label{s4.2.1}
+Usage is the same as for html, but easier.
+
+\begin{lstlisting}
+./dlluptex.py < index.dllu > index_dllu.tex
+pdflatex texheader.tex
+pdflatex texheader.tex
+\end{lstlisting}
+\subsection{Syntax highlighting}
+\label{s4.3}
+There is experimental syntax highlighting support for vim.
+
+\begin{figure}[htb]
+\centering
+\includegraphics[width=0.5\textwidth]{gdTcORo.png}
+\caption{Syntax highlighting example in vim.}
+\label{fig2}
+\end{figure}
+It is modified from the Markdown vim syntax file maintained by Tim Pope.
+
+\begin{center}\huge \href{https://bitbucket.org/dllu/dllup/raw/master/dllup.vim}{Download vim syntax}\end{center}
+\section{FAQ}
+\label{s5}
+\begin{quote}
+Certain features don't work in my browser.\end{quote}
+The output of dllup has been W3C validated and tested in the latest versions of Firefox, Google Chrome, and even \href{https://en.wikipedia.org/wiki/Lynx_%28web_browser%29}{Lynx}. No attempt shall be made to support other browsers, although you are free to extend dllup as you please.
+
+\begin{quote}
+Why SVG math instead of MathJax or KaTeX?\end{quote}
+MathJax is slow, causes page content to jump around as math is being rendered, and may freeze the browser on old hardware or slow browsers. KaTeX does not support critical math entities such as matrices. Saving math equations as SVG files also allows the SVG files to be cached in case a single equation shows up many times. Some users also prefer to disable Javascript for privacy reasons even when they are using a modern browser that supports SVG images.
+
+\begin{quote}
+Where can I find an example of a dllup file?\end{quote}
+This \href{index.dllu}{documentation itself was written in dllup}.
+
+\begin{quote}
+The parser crashed.\end{quote}
+This can be due to a syntax error in the input. The dllup markup language is stricter than Markdown and has some syntax that is not obvious to people other than myself.
+
+

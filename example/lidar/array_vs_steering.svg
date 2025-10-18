@@ -1,0 +1,65 @@
+<svg width="1000" height="600" viewBox="0 0 1000 600" xmlns="http://www.w3.org/2000/svg">
+  <title>Radiating rays (left) and animated metronome line (right)</title>
+  <desc>
+    Left half: evenly spaced red rays from a bottom circle. Right half: a single red line rotating
+    back-and-forth around a bottom circle. The halves are divided by a dotted black line.
+  </desc>
+
+  <!-- Background -->
+  <rect x="0" y="0" width="100%" height="100%" fill="white"/>
+
+  <!-- Dotted divider -->
+  <line x1="500" y1="20" x2="500" y2="580"
+        stroke="black" stroke-width="6" stroke-dasharray="10 18" stroke-linecap="round" />
+
+  <!-- ===== Left half: fan of rays ===== -->
+  <!-- Common styling -->
+  <defs>
+    <!-- A single upward ray (we will rotate copies of this) -->
+    <line id="ray" x1="250" y1="520" x2="250" y2="220"
+          stroke="red" stroke-width="6" stroke-linecap="round"/>
+  </defs>
+
+
+  <!-- Evenly spaced rays around vertical. Adjust angles array for more/less rays. -->
+  <!-- Here we span -80° to +80° in 20° steps -->
+  <use href="#ray" transform="rotate(-60 250 520)"/>
+  <use href="#ray" transform="rotate(-40 250 520)"/>
+  <use href="#ray" transform="rotate(-20 250 520)"/>
+  <use href="#ray" transform="rotate(0 250 520)"/>
+  <use href="#ray" transform="rotate(20 250 520)"/>
+  <use href="#ray" transform="rotate(40 250 520)"/>
+  <use href="#ray" transform="rotate(60 250 520)"/>
+
+  <!-- ===== Right half: animated metronome line ===== -->
+
+  <!-- The rotating red line -->
+  <g id="metronome">
+    <line x1="750" y1="520" x2="750" y2="220"
+          stroke="red" stroke-width="6" stroke-linecap="round">
+      <!-- Back-and-forth rotation around the circle center.
+           Change angles or dur to taste. -->
+      <animateTransform attributeName="transform"
+                        attributeType="XML"
+                        type="rotate"
+                        values="-30 750 520; 30 750 520; -30 750 520"
+                        keyTimes="0; 0.5; 1"
+                        dur="2.4s"
+                        repeatCount="indefinite"
+                        calcMode="spline"
+                        keySplines="0.42 0 0.58 1; 0.42 0 0.58 1"/>
+    </line>
+  </g>
+
+  <!-- Bottom circle (left) -->
+  <circle cx="250" cy="520" r="22" fill="white" stroke="black" stroke-width="6"/>
+  <!-- Bottom circle (right) -->
+  <circle cx="750" cy="520" r="22" fill="white" stroke="black" stroke-width="6"/>
+
+  <!-- Accessibility: reduced motion preference (freeze the animation) -->
+  <style>
+    @media (prefers-reduced-motion: reduce) {
+      #metronome animateTransform { display: none; }
+    }
+  </style>
+</svg>
