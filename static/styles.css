@@ -50,8 +50,10 @@ a:hover, a:focus {
 }
 
 main {
-    width: 600px;
+    width: 80%;
+    max-width: 600px;
     margin: 0 auto;
+    font-kerning: normal;
 }
 
 nav {
@@ -381,6 +383,12 @@ canvas {
 @media all and (max-width: 750px) {
     body {
         font-size: 2.4vw;
+    }
+}
+
+@media all and (max-width: 543px) {
+    body {
+        font-size: 13px;
     }
 }
 

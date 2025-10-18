@@ -10,6 +10,7 @@ pub struct Config {
     pub math: MathConfig,
     pub html: HtmlConfig,
     pub images: ImagesConfig,
+    pub feed: FeedConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -47,6 +48,30 @@ pub struct ImagesConfig {
     pub jpeg_quality: u8,
     pub layout_width: u32,
     pub remote_fetch_timeout_secs: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct FeedConfig {
+    pub enabled: bool,
+    pub output_path: String,
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub link: Option<String>,
+    pub limit: Option<usize>,
+}
+
+impl Default for FeedConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            output_path: "rss.xml".into(),
+            title: None,
+            description: None,
+            link: None,
+            limit: None,
+        }
+    }
 }
 
 impl Default for ImagesConfig {
@@ -90,6 +115,7 @@ impl Config {
                 }
             }
         }
+        self.feed.normalize();
         self.images.normalize();
     }
 }
@@ -120,6 +146,50 @@ impl ImagesConfig {
                 *root = "/".into();
             } else {
                 *root = trimmed.trim_end_matches('/').to_string();
+            }
+        }
+    }
+}
+
+impl FeedConfig {
+    fn normalize(&mut self) {
+        let trimmed = self.output_path.trim();
+        if trimmed.is_empty() {
+            self.output_path = "rss.xml".into();
+        } else {
+            self.output_path = trimmed.to_string();
+        }
+
+        self.title = self.title.as_ref().and_then(|t| {
+            let trimmed = t.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        });
+
+        self.description = self.description.as_ref().and_then(|d| {
+            let trimmed = d.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        });
+
+        self.link = self.link.as_ref().and_then(|l| {
+            let trimmed = l.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        });
+
+        if let Some(limit) = self.limit {
+            if limit == 0 {
+                self.limit = None;
             }
         }
     }
