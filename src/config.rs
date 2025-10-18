@@ -24,6 +24,7 @@ pub struct MathConfig {
 pub struct HtmlConfig {
     pub template_path: String,
     pub css_href: String,
+    pub blog_dir: Option<String>,
 }
 
 impl Default for HtmlConfig {
@@ -31,6 +32,7 @@ impl Default for HtmlConfig {
         Self {
             template_path: "static/template.html".into(),
             css_href: "static/styles.css".into(),
+            blog_dir: Some("blog".into()),
         }
     }
 }
@@ -75,6 +77,17 @@ impl Config {
         if let Some(root) = &mut self.root_url {
             if root != "/" {
                 *root = root.trim_end_matches('/').to_string();
+            }
+        }
+        if let Some(blog_dir) = &mut self.html.blog_dir {
+            let trimmed = blog_dir.trim();
+            if trimmed.is_empty() {
+                self.html.blog_dir = None;
+            } else {
+                *blog_dir = trimmed.trim_matches('/').to_string();
+                if blog_dir.is_empty() {
+                    self.html.blog_dir = None;
+                }
             }
         }
         self.images.normalize();

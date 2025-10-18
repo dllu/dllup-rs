@@ -470,8 +470,7 @@ impl HtmlRenderer {
 
         if let Some(exif) = processed.exif.as_ref() {
             if !exif.entries.is_empty() {
-                let mut details =
-                    String::from("<details><summary>Image metadata</summary><ul>");
+                let mut details = String::from("<details><summary>Image metadata</summary><ul>");
                 for (label, value) in &exif.entries {
                     details.push_str(&format!(
                         "<li><strong>{}</strong>: {}</li>",
@@ -924,6 +923,7 @@ pub fn wrap_html_document(
     body: &str,
     table_of_contents: &str,
     metas: &str,
+    index: &str,
 ) -> Result<String, String> {
     let template_path = &config.html.template_path;
     let template = fs::read_to_string(template_path)
@@ -936,6 +936,7 @@ pub fn wrap_html_document(
         .replace("{{css}}", &css_href)
         .replace("{{tableofcontents}}", table_of_contents)
         .replace("{{metas}}", metas)
+        .replace("{{index}}", index)
         .replace("{{body}}", body))
 }
 
