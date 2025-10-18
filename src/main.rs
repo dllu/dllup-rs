@@ -9,13 +9,77 @@ mod math_engine;
 mod parser;
 
 use crate::ast::{Block, InlineElement};
+use git2::{DiffOptions, Repository, Status};
 use parser::Parser;
+use serde::Serialize;
+use serde_xml_rs::to_string;
 use std::convert::TryFrom;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
-use time::{format_description::well_known::Rfc2822, Date, Month, Time};
+use time::{
+    format_description::well_known::{Rfc2822, Rfc3339},
+    Date, Month, OffsetDateTime, Time, UtcOffset,
+};
+
+struct ProcessedPage {
+    output_path: PathBuf,
+    source_path: PathBuf,
+    root_url: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename = "urlset")]
+struct SitemapUrlSet {
+    #[serde(rename = "@xmlns")]
+    xmlns: &'static str,
+    #[serde(rename = "url")]
+    urls: Vec<SitemapUrl>,
+}
+
+#[derive(Serialize)]
+struct SitemapUrl {
+    loc: String,
+    lastmod: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename = "rss")]
+struct RssFeed {
+    #[serde(rename = "@version")]
+    version: &'static str,
+    channel: RssChannel,
+}
+
+#[derive(Serialize)]
+struct RssChannel {
+    title: String,
+    link: String,
+    description: String,
+    #[serde(rename = "lastBuildDate", skip_serializing_if = "Option::is_none")]
+    last_build_date: Option<String>,
+    #[serde(rename = "item")]
+    items: Vec<RssItem>,
+}
+
+#[derive(Serialize)]
+struct RssItem {
+    title: String,
+    link: String,
+    guid: RssGuid,
+    #[serde(rename = "pubDate", skip_serializing_if = "Option::is_none")]
+    pub_date: Option<String>,
+    description: String,
+}
+
+#[derive(Serialize)]
+struct RssGuid {
+    #[serde(rename = "@isPermaLink")]
+    is_perma_link: &'static str,
+    #[serde(rename = "#content")]
+    value: String,
+}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -51,11 +115,20 @@ fn main() {
             std::process::exit(1);
         }
 
+        let mut processed_pages = Vec::new();
         for file in files {
-            if let Err(e) = process_file(&file, Some(input_path), explicit_config.as_ref()) {
-                eprintln!("{}", e);
-                std::process::exit(1);
+            match process_file(&file, Some(input_path), explicit_config.as_ref()) {
+                Ok(page) => processed_pages.push(page),
+                Err(e) => {
+                    eprintln!("{}", e);
+                    std::process::exit(1);
+                }
             }
+        }
+
+        if let Err(e) = generate_sitemap(input_path, &processed_pages) {
+            eprintln!("{}", e);
+            std::process::exit(1);
         }
     } else if let Err(e) = process_file(input_path, input_path.parent(), explicit_config.as_ref()) {
         eprintln!("{}", e);
@@ -67,7 +140,7 @@ fn process_file(
     input_path: &Path,
     site_root: Option<&Path>,
     explicit_config: Option<&config::Config>,
-) -> Result<(), String> {
+) -> Result<ProcessedPage, String> {
     let config = if let Some(cfg) = explicit_config {
         cfg.clone()
     } else {
@@ -123,6 +196,8 @@ fn process_file(
         generate_rss_feed(site_root, &index_data, &config)?;
     }
 
+    let root_url = config.root_url.clone();
+
     if config.timings {
         eprintln!(
             "Timings ({}): parse={:?}, render={:?}, wrap={:?}",
@@ -133,7 +208,259 @@ fn process_file(
         );
     }
 
+    Ok(ProcessedPage {
+        output_path: out_path,
+        source_path: input_path.to_path_buf(),
+        root_url,
+    })
+}
+
+fn generate_sitemap(site_root: &Path, pages: &[ProcessedPage]) -> Result<(), String> {
+    if pages.is_empty() {
+        return Ok(());
+    }
+
+    let site_root_canon = site_root.canonicalize().map_err(|e| {
+        format!(
+            "Failed to canonicalize site root {}: {}",
+            site_root.display(),
+            e
+        )
+    })?;
+
+    let repo = Repository::discover(&site_root_canon).ok();
+    let repo_workdir = if let Some(repo) = repo.as_ref() {
+        if let Some(dir) = repo.workdir() {
+            match dir.canonicalize() {
+                Ok(path) => Some(path),
+                Err(_) => Some(dir.to_path_buf()),
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let mut global_root_url: Option<String> = None;
+    for page in pages {
+        if let Some(root_url) = &page.root_url {
+            if let Some(existing) = &global_root_url {
+                if existing != root_url {
+                    return Err(format!(
+                        "Conflicting root_url values detected: '{}' vs '{}'",
+                        existing, root_url
+                    ));
+                }
+            } else {
+                global_root_url = Some(root_url.clone());
+            }
+        }
+    }
+
+    let mut entries = Vec::new();
+    for page in pages {
+        let output_canon = page.output_path.canonicalize().map_err(|e| {
+            format!(
+                "Failed to canonicalize output {}: {}",
+                page.output_path.display(),
+                e
+            )
+        })?;
+        let rel_path = output_canon.strip_prefix(&site_root_canon).map_err(|_| {
+            format!(
+                "Generated file {} is not inside site root {}",
+                output_canon.display(),
+                site_root_canon.display()
+            )
+        })?;
+        let relative_url_path = pathbuf_to_url_path(rel_path);
+
+        let page_root_url = page
+            .root_url
+            .as_deref()
+            .or_else(|| global_root_url.as_deref());
+
+        let loc = if let Some(root_url) = page_root_url {
+            build_blog_href(Some(root_url), &relative_url_path)
+        } else if relative_url_path.is_empty() {
+            "/".to_string()
+        } else {
+            let trimmed = relative_url_path.trim_start_matches('/');
+            format!("/{}", trimmed)
+        };
+
+        let source_canon = page.source_path.canonicalize().map_err(|e| {
+            format!(
+                "Failed to canonicalize source {}: {}",
+                page.source_path.display(),
+                e
+            )
+        })?;
+
+        let lastmod = determine_lastmod(repo.as_ref(), repo_workdir.as_deref(), &source_canon)?;
+
+        let lastmod_str = lastmod.format(&Rfc3339).map_err(|e| {
+            format!(
+                "Failed to format timestamp for {}: {}",
+                page.source_path.display(),
+                e
+            )
+        })?;
+
+        entries.push((loc, lastmod_str));
+    }
+
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+
+    let sitemap = SitemapUrlSet {
+        xmlns: "http://www.sitemaps.org/schemas/sitemap/0.9",
+        urls: entries
+            .into_iter()
+            .map(|(loc, lastmod)| SitemapUrl { loc, lastmod })
+            .collect(),
+    };
+
+    let xml = to_string(&sitemap).map_err(|e| format!("Failed to build sitemap XML: {}", e))?;
+
+    let sitemap_path = site_root.join("sitemap.xml");
+    fs::write(&sitemap_path, xml)
+        .map_err(|e| format!("Failed to write {}: {}", sitemap_path.display(), e))?;
+
     Ok(())
+}
+
+fn determine_lastmod(
+    repo: Option<&Repository>,
+    repo_workdir: Option<&Path>,
+    source_path: &Path,
+) -> Result<OffsetDateTime, String> {
+    let metadata = fs::metadata(source_path).map_err(|e| {
+        format!(
+            "Failed to read metadata for {}: {}",
+            source_path.display(),
+            e
+        )
+    })?;
+    let fs_modified = metadata.modified().map_err(|e| {
+        format!(
+            "Failed to read modification time for {}: {}",
+            source_path.display(),
+            e
+        )
+    })?;
+    let fs_time = OffsetDateTime::from(fs_modified);
+
+    let (repo, workdir) = match (repo, repo_workdir) {
+        (Some(r), Some(wd)) => (r, wd),
+        _ => return Ok(fs_time),
+    };
+
+    let relative_path = match source_path.strip_prefix(workdir) {
+        Ok(path) => path,
+        Err(_) => return Ok(fs_time),
+    };
+
+    match repo.status_file(relative_path) {
+        Ok(status) => {
+            if has_local_changes(status) {
+                return Ok(fs_time);
+            }
+        }
+        Err(_) => return Ok(fs_time),
+    }
+
+    if let Ok(Some(commit_time)) = git_last_commit_time(repo, relative_path) {
+        return Ok(commit_time);
+    }
+
+    Ok(fs_time)
+}
+
+fn has_local_changes(status: Status) -> bool {
+    status.intersects(
+        Status::INDEX_NEW
+            | Status::INDEX_MODIFIED
+            | Status::INDEX_DELETED
+            | Status::INDEX_RENAMED
+            | Status::INDEX_TYPECHANGE
+            | Status::WT_NEW
+            | Status::WT_MODIFIED
+            | Status::WT_DELETED
+            | Status::WT_RENAMED
+            | Status::WT_TYPECHANGE
+            | Status::CONFLICTED,
+    )
+}
+
+fn git_last_commit_time(
+    repo: &Repository,
+    relative_path: &Path,
+) -> Result<Option<OffsetDateTime>, git2::Error> {
+    let mut revwalk = match repo.revwalk() {
+        Ok(walk) => walk,
+        Err(_) => return Ok(None),
+    };
+    if revwalk.push_head().is_err() {
+        return Ok(None);
+    }
+    revwalk.set_sorting(git2::Sort::TIME)?;
+
+    let pathspec = relative_path.to_string_lossy().replace('\\', "/");
+
+    for oid_result in revwalk {
+        let oid = match oid_result {
+            Ok(id) => id,
+            Err(_) => continue,
+        };
+        let commit = match repo.find_commit(oid) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let tree = match commit.tree() {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+
+        let parent_tree = if commit.parent_count() > 0 {
+            match commit.parent(0) {
+                Ok(parent) => match parent.tree() {
+                    Ok(t) => Some(t),
+                    Err(_) => None,
+                },
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+
+        let mut diff_opts = DiffOptions::new();
+        diff_opts.include_typechange(true);
+        diff_opts.pathspec(&pathspec);
+
+        let diff =
+            match repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), Some(&mut diff_opts)) {
+                Ok(d) => d,
+                Err(_) => continue,
+            };
+
+        if diff.deltas().len() > 0 {
+            let git_time = commit.time();
+            if let Ok(dt) = offsetdatetime_from_git_time(git_time) {
+                return Ok(Some(dt));
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+fn offsetdatetime_from_git_time(
+    time: git2::Time,
+) -> Result<OffsetDateTime, time::error::ComponentRange> {
+    let base = OffsetDateTime::from_unix_timestamp(time.seconds())?;
+    let offset = UtcOffset::from_whole_seconds(time.offset_minutes() * 60)?;
+    Ok(base.to_offset(offset))
 }
 
 fn collect_dllu_files(dir: &Path) -> Result<Vec<PathBuf>, String> {
@@ -473,54 +800,39 @@ fn generate_rss_feed(
         .find_map(|entry| entry.date_key.and_then(date_key_to_rfc2822));
     let max_items = feed_cfg.limit.unwrap_or(blog_index.entries.len());
 
-    let mut feed = String::new();
-    feed.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-    feed.push_str("<rss version=\"2.0\">\n");
-    feed.push_str("<channel>\n");
-    feed.push_str("  <title>");
-    feed.push_str(&escape_html_text(&channel_title));
-    feed.push_str("</title>\n");
-    feed.push_str("  <link>");
-    feed.push_str(&escape_html_text(&channel_link));
-    feed.push_str("</link>\n");
-    feed.push_str("  <description>");
-    feed.push_str(&escape_html_text(&channel_description));
-    feed.push_str("</description>\n");
-    if let Some(last_build_date) = last_build_date {
-        feed.push_str("  <lastBuildDate>");
-        feed.push_str(&escape_html_text(&last_build_date));
-        feed.push_str("</lastBuildDate>\n");
-    }
+    let items: Vec<RssItem> = blog_index
+        .entries
+        .iter()
+        .take(max_items)
+        .map(|entry| RssItem {
+            title: entry.title.clone(),
+            link: entry.permalink.clone(),
+            guid: RssGuid {
+                is_perma_link: "true",
+                value: entry.permalink.clone(),
+            },
+            pub_date: entry.date_key.and_then(date_key_to_rfc2822),
+            description: entry
+                .summary
+                .as_ref()
+                .map(String::as_str)
+                .unwrap_or(&entry.title)
+                .to_string(),
+        })
+        .collect();
 
-    for entry in blog_index.entries.iter().take(max_items) {
-        feed.push_str("  <item>\n");
-        feed.push_str("    <title>");
-        feed.push_str(&escape_html_text(&entry.title));
-        feed.push_str("</title>\n");
-        feed.push_str("    <link>");
-        feed.push_str(&escape_html_text(&entry.permalink));
-        feed.push_str("</link>\n");
-        feed.push_str("    <guid isPermaLink=\"true\">");
-        feed.push_str(&escape_html_text(&entry.permalink));
-        feed.push_str("</guid>\n");
-        if let Some(pub_date) = entry.date_key.and_then(date_key_to_rfc2822) {
-            feed.push_str("    <pubDate>");
-            feed.push_str(&escape_html_text(&pub_date));
-            feed.push_str("</pubDate>\n");
-        }
-        if let Some(summary) = &entry.summary {
-            feed.push_str("    <description>");
-            feed.push_str(&escape_html_text(summary));
-            feed.push_str("</description>\n");
-        } else {
-            feed.push_str("    <description>");
-            feed.push_str(&escape_html_text(&entry.title));
-            feed.push_str("</description>\n");
-        }
-        feed.push_str("  </item>\n");
-    }
+    let feed = RssFeed {
+        version: "2.0",
+        channel: RssChannel {
+            title: channel_title,
+            link: channel_link,
+            description: channel_description,
+            last_build_date,
+            items,
+        },
+    };
 
-    feed.push_str("</channel>\n</rss>\n");
+    let xml = to_string(&feed).map_err(|e| format!("Failed to build RSS feed XML: {}", e))?;
 
     let output_path = {
         let candidate = Path::new(&feed_cfg.output_path);
@@ -541,7 +853,7 @@ fn generate_rss_feed(
         })?;
     }
 
-    fs::write(&output_path, feed)
+    fs::write(&output_path, xml)
         .map_err(|e| format!("Failed to write {}: {}", output_path.display(), e))?;
 
     Ok(())
