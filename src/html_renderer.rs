@@ -1047,6 +1047,20 @@ mod tests {
     }
 
     #[test]
+    fn render_reference_and_anchor() {
+        use crate::parser::Parser;
+
+        let input = "Doc\n\n===\n\nThis cites (#eade).\n[#eade]\n";
+        let mut parser = Parser::default();
+        parser.parse(input);
+
+        let mut renderer = HtmlRenderer::new(&crate::config::Config::default());
+        let html = renderer.render(&parser.article);
+        assert!(html.contains("<a class=\"refname\" href=\"#eade\">eade</a>"));
+        assert!(html.contains("<span class=\"refname\" id=\"eade\">eade</span>"));
+    }
+
+    #[test]
     fn root_url_prefixes_internal_links() {
         let mut cfg = crate::config::Config::default();
         cfg.root_url = Some("https://example.com".into());
@@ -1084,7 +1098,10 @@ mod tests {
 
         let fixture_path = Path::new("example/math.dllu");
         if !fixture_path.exists() {
-            eprintln!("skipping toc test: fixture {} missing", fixture_path.display());
+            eprintln!(
+                "skipping toc test: fixture {} missing",
+                fixture_path.display()
+            );
             return;
         }
         let source = fs::read_to_string(fixture_path).expect("math example fixture");

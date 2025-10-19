@@ -3,10 +3,6 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::str::Lines;
 
-lazy_static! {
-    static ref TABLE_SEPARATOR_RE: Regex = Regex::new(r"^(?:\\||\\s|\\-)*$").unwrap();
-}
-
 #[derive(Debug, Default)]
 pub struct Parser {
     pub article: Article,
@@ -530,12 +526,41 @@ impl Parser {
                     });
                     continue;
                 } else {
-                    // not a link, keep as text
-                    buffer.push('[');
-                    buffer.push_str(&link_text);
-                    if i <= chars.len() {
-                        buffer.push(']');
+                    let trimmed = link_text.trim();
+                    if let Some(name) = trimmed.strip_prefix('#').and_then(|rest| {
+                        if is_valid_refname(rest) {
+                            Some(rest.to_string())
+                        } else {
+                            None
+                        }
+                    }) {
+                        elements.push(InlineElement::ReferenceAnchor {
+                            content: name,
+                            invisible: false,
+                        });
+                    } else {
+                        buffer.push('[');
+                        buffer.push_str(&link_text);
+                        if i <= chars.len() {
+                            buffer.push(']');
+                        }
                     }
+                    continue;
+                }
+            }
+            if c == '(' && i + 2 < chars.len() && chars[i + 1] == '#' {
+                let mut j = i + 2;
+                while j < chars.len() && is_valid_refname_char(chars[j]) {
+                    j += 1;
+                }
+                if j > i + 2 && j < chars.len() && chars[j] == ')' {
+                    if !buffer.is_empty() {
+                        elements.push(InlineElement::Text(buffer.clone()));
+                        buffer.clear();
+                    }
+                    let name: String = chars[i + 2..j].iter().collect();
+                    elements.push(InlineElement::Reference(name));
+                    i = j + 1;
                     continue;
                 }
             }
@@ -602,7 +627,7 @@ impl Parser {
         let mut table_lines: Vec<String> = Vec::new();
         while let Some(&line) = lines.peek() {
             let t = line.trim();
-            if t.starts_with("| ") || TABLE_SEPARATOR_RE.is_match(t) {
+            if t.starts_with("| ") || is_table_separator_row(t) {
                 table_lines.push(line.to_string());
                 lines.next();
             } else {
@@ -621,25 +646,25 @@ impl Parser {
                 break;
             }
         }
-        // First line is header
-        let header_cells =
-            parse_table_row_cells(table_lines.first().map(|s| s.as_str()).unwrap_or(""));
-        let header = header_cells
-            .into_iter()
-            .map(|cell| Self::parse_inline_elements(cell.trim()))
-            .collect::<Vec<_>>();
-        // Middle lines are data (skip first header and separator lines, and any empty/separator lines)
+        let mut header: Vec<Vec<InlineElement>> = Vec::new();
         let mut rows: Vec<Vec<Vec<InlineElement>>> = Vec::new();
-        for row in table_lines.into_iter().skip(1) {
+        let mut header_filled = false;
+
+        for row in table_lines.into_iter() {
             let t = row.trim();
-            if TABLE_SEPARATOR_RE.is_match(t) {
+            if is_table_separator_row(t) {
                 continue;
             }
             let cells = parse_table_row_cells(&row)
                 .into_iter()
                 .map(|cell| Self::parse_inline_elements(cell.trim()))
                 .collect::<Vec<_>>();
-            rows.push(cells);
+            if !header_filled {
+                header = cells;
+                header_filled = true;
+            } else {
+                rows.push(cells);
+            }
         }
         Block::Table {
             id_number: self.tables.len(),
@@ -670,4 +695,132 @@ fn parse_table_row_cells(row: &str) -> Vec<String> {
         .map(|s| s.to_string())
         .filter(|s| !s.trim().is_empty())
         .collect::<Vec<_>>()
+}
+
+fn is_table_separator_row(row: &str) -> bool {
+    let trimmed = row.trim();
+    if trimmed.is_empty() {
+        return true;
+    }
+    trimmed.chars().all(|c| matches!(c, '|' | '-' | ' ' | '\t'))
+}
+
+fn is_valid_refname(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(is_valid_refname_char)
+}
+
+fn is_valid_refname_char(c: char) -> bool {
+    c.is_alphanumeric() || matches!(c, '-' | '_')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cell_text(cell: &[InlineElement]) -> String {
+        cell.iter()
+            .map(|inline| match inline {
+                InlineElement::Text(s) => s.as_str(),
+                _ => "",
+            })
+            .collect::<Vec<_>>()
+            .join("")
+    }
+
+    #[test]
+    fn separator_rows_are_ignored() {
+        let input = "Table Demo\n\n===\n\n| Colour | Pattern |\n| ------- | -------- |\n| White | Spots |\n";
+        let mut parser = Parser::default();
+        parser.parse(input);
+        let table = parser
+            .article
+            .body
+            .iter()
+            .find_map(|block| {
+                if let Block::Table { header, rows, .. } = block {
+                    Some((header, rows))
+                } else {
+                    None
+                }
+            })
+            .expect("expected table");
+        assert_eq!(table.0.len(), 2);
+        assert_eq!(cell_text(&table.0[0]), "Colour");
+        assert_eq!(cell_text(&table.0[1]), "Pattern");
+        assert_eq!(table.1.len(), 1);
+        assert_eq!(table.1[0].len(), 2);
+        assert_eq!(cell_text(&table.1[0][0]), "White");
+        assert_eq!(cell_text(&table.1[0][1]), "Spots");
+    }
+
+    #[test]
+    fn separator_rows_with_wrong_column_count_are_ignored() {
+        let input = "Table Demo\n\n===\n\n| Colour | Pattern |\n|----------------|\n| White | Spots |\n| Black | Solid |\n";
+        let mut parser = Parser::default();
+        parser.parse(input);
+        let table = parser
+            .article
+            .body
+            .iter()
+            .find_map(|block| {
+                if let Block::Table { rows, .. } = block {
+                    Some(rows)
+                } else {
+                    None
+                }
+            })
+            .expect("expected table rows");
+        assert_eq!(table.len(), 2);
+        assert!(table.iter().all(|row| row.len() == 2));
+    }
+
+    #[test]
+    fn parses_reference_citation() {
+        let input = "Doc\n\n===\n\nThis cites (#eade).\n";
+        let mut parser = Parser::default();
+        parser.parse(input);
+        let paragraph = parser
+            .article
+            .body
+            .iter()
+            .find_map(|block| {
+                if let Block::Paragraph(elements) = block {
+                    Some(elements)
+                } else {
+                    None
+                }
+            })
+            .expect("expected paragraph");
+        assert!(paragraph
+            .iter()
+            .any(|el| { matches!(el, InlineElement::Reference(name) if name == "eade") }));
+    }
+
+    #[test]
+    fn parses_reference_anchor() {
+        let input = "Doc\n\n===\n\n[#eade]\n";
+        let mut parser = Parser::default();
+        parser.parse(input);
+        let paragraph = parser
+            .article
+            .body
+            .iter()
+            .find_map(|block| {
+                if let Block::Paragraph(elements) = block {
+                    Some(elements)
+                } else {
+                    None
+                }
+            })
+            .expect("expected paragraph");
+        assert!(paragraph.iter().any(|el| {
+            matches!(
+                el,
+                InlineElement::ReferenceAnchor {
+                    content,
+                    invisible: false
+                } if content == "eade"
+            )
+        }));
+    }
 }
