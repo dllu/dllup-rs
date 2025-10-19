@@ -35,7 +35,10 @@ cache_dir = "img"
 # Responsive widths (in pixels) generated for raster images
 sizes = [480, 800, 1200]
 
-# Width used to pre-compute the fallback <img> layout dimensions
+# Subset of `sizes` used to populate the <img> srcset attribute
+display_sizes = [480, 800]
+
+# Width used to pre-compute layout dimensions when metadata is missing
 layout_width = 1200
 
 # JPEG quality for resized outputs
@@ -59,6 +62,6 @@ When `root_url` is configured, any link or image whose URL starts with `/` is pr
 
 The template is rendered by replacing `{{title}}`, `{{css}}`, `{{tableofcontents}}`, `{{metas}}`, and `{{body}}`. A nested table of contents is generated from the section headings; include `{{tableofcontents}}` inside the template to display it. The `{{metas}}` placeholder is populated with Open Graph / Twitter tags derived from the first paragraph and first image, along with sensible defaults for robots and card type.
 * supports cross references references and tables
-* responsive images rendered with `<picture>` (cached resizing, EXIF-aware layout, downloadable variants)
+* responsive images rendered with `<img>` `srcset` (cached resizing, EXIF-aware layout, downloadable variants)
 * html5 semantic figure and figcaption for images
 * implemented in rust for some reason

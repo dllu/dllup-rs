@@ -1,0 +1,41 @@
+# Enable timing output on stderr
+timings = false
+
+# Base URL used for site-relative links like "/post.html"
+root_url = "file:///home/dllu/proj/dllup-rs"
+
+# Path to the HTML wrapper template used to produce the final page
+template_path = "static/template.html"
+
+# HREF for the page stylesheet. Relative values are joined with root_url.
+css_href = "static/styles.css"
+
+[math]
+# Try to spawn the persistent Node.js-based KaTeX helper before other options
+prefer_persistent = true
+
+# External command used to render math when present. The command should read
+# TeX from stdin and write HTML to stdout, matching KaTeX CLI behaviour.
+command = "npx katex"
+
+[images]
+# Directory used to cache fetched originals and generated variants
+cache_dir = "img"
+
+# Optional CDN base URL used for all image links (falls back to root_url)
+img_root_url = "file:///home/dllu/proj/dllup-rs/img"
+
+# Target responsive widths (in pixels) that will be generated for every raster image
+sizes = [600, 1200, 3840, 7680]
+
+# Subset of `sizes` used for the <img> srcset attribute
+display_sizes = [600, 1200, 3840]
+
+# Width in pixels used to pre-compute layout dimensions when metadata is missing
+layout_width = 600
+
+# JPEG quality (10-100) used when encoding resized JPEG derivatives
+jpeg_quality = 90
+
+# Timeout (in seconds) for fetching remote images before falling back to the original URL
+remote_fetch_timeout_secs = 10

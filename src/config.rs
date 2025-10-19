@@ -45,6 +45,7 @@ pub struct ImagesConfig {
     pub base_dir: Option<String>,
     pub img_root_url: Option<String>,
     pub sizes: Vec<u32>,
+    pub display_sizes: Vec<u32>,
     pub jpeg_quality: u8,
     pub layout_width: u32,
     pub remote_fetch_timeout_secs: u64,
@@ -81,6 +82,7 @@ impl Default for ImagesConfig {
             base_dir: None,
             img_root_url: None,
             sizes: vec![480, 800, 1200],
+            display_sizes: Vec::new(),
             jpeg_quality: 85,
             layout_width: 1200,
             remote_fetch_timeout_secs: 10,
@@ -130,6 +132,18 @@ impl ImagesConfig {
         self.sizes.dedup();
         if self.sizes.is_empty() {
             self.sizes.push(self.layout_width.max(1));
+        }
+        self.display_sizes.retain(|v| *v > 0);
+        self.display_sizes.sort_unstable();
+        self.display_sizes.dedup();
+        if self.display_sizes.is_empty() {
+            self.display_sizes = self.sizes.clone();
+        } else {
+            self.display_sizes
+                .retain(|v| self.sizes.binary_search(v).is_ok());
+            if self.display_sizes.is_empty() {
+                self.display_sizes = self.sizes.clone();
+            }
         }
         if self.layout_width == 0 {
             self.layout_width = 1200;
