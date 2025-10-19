@@ -3,7 +3,7 @@ use crate::config;
 use crate::image_processor;
 use crate::math_engine::{ExternalCmdEngine, MathEngine};
 use inkjet::formatter::ThemedHtml;
-use inkjet::theme::vendored::ONELIGHT;
+use inkjet::theme::vendored::ONEDARKER;
 use inkjet::theme::Theme;
 use inkjet::{Highlighter, Language};
 use regex::Regex;
@@ -916,7 +916,7 @@ impl HtmlRenderer {
 
 fn highlight_with_inkjet(language: Option<&str>, code: &str) -> Option<String> {
     let mut highlighter = Highlighter::new();
-    let theme = Theme::from_helix(ONELIGHT).ok()?;
+    let theme = Theme::from_helix(ONEDARKER).ok()?;
     let formatter = ThemedHtml::new(theme);
     let lang = language.and_then(Language::from_token).unwrap_or_else(|| {
         Language::from_token("plaintext").unwrap_or(Language::from_token("none").unwrap())
