@@ -266,18 +266,30 @@ impl HtmlRenderer {
     fn render_section_header(&mut self, level: usize, id: &str, text: &str) -> String {
         let level = std::cmp::min(level, 6);
         let tag = format!("h{}", level);
-        let anchor_id = self.register_section(level, text);
+        let (anchor_id, numbering_label) = self.register_section(level, text);
+        let escaped_anchor = escape_html(&anchor_id);
+        let escaped_number = escape_html(&numbering_label);
+        let escaped_title = escape_html(text);
+        let escaped_slug = escape_html(id);
+        let slug_anchor = if escaped_slug != escaped_anchor {
+            format!(
+                "<span id=\"{}\" class=\"section-anchor\" aria-hidden=\"true\"></span>",
+                escaped_slug
+            )
+        } else {
+            String::new()
+        };
         format!(
-            "<{} id=\"{}\"><span id=\"{}\">{}</span></{}>\n",
-            tag,
-            escape_html(id),
-            escape_html(&anchor_id),
-            escape_html(text),
-            tag
+            "<{tag} id=\"{anchor}\">{slug_anchor}<a href=\"#{anchor}\" class=\"hnum\">{number}</a> <span>{title}</span></{tag}>\n",
+            tag = tag,
+            anchor = escaped_anchor,
+            slug_anchor = slug_anchor,
+            number = escaped_number,
+            title = escaped_title,
         )
     }
 
-    fn register_section(&mut self, level: usize, text: &str) -> String {
+    fn register_section(&mut self, level: usize, text: &str) -> (String, String) {
         let level = level.clamp(1, 6);
         if self.section_counters.len() < level {
             self.section_counters.resize(level, 0);
@@ -298,7 +310,7 @@ impl HtmlRenderer {
             numbering_label: numbering_label.clone(),
             anchor_id: anchor_id.clone(),
         });
-        anchor_id
+        (anchor_id, numbering_label)
     }
 
     fn capture_description(&mut self, elements: &[InlineElement]) {
@@ -1055,6 +1067,16 @@ mod tests {
         let html = renderer.render(&parser.article);
         assert!(html.contains("<a class=\"refname\" href=\"#eade\">eade</a>"));
         assert!(html.contains("<span class=\"refname\" id=\"eade\">eade</span>"));
+    }
+
+    #[test]
+    fn render_numbered_headings() {
+        let mut parser = crate::parser::Parser::default();
+        parser.parse("Title\n\n===\n\n# Intro\n\n## Details\n");
+        let mut renderer = HtmlRenderer::new(&crate::config::Config::default());
+        let html = renderer.render(&parser.article);
+        assert!(html.contains("<h1 id=\"s1\"><span id=\"intro\" class=\"section-anchor\" aria-hidden=\"true\"></span><a href=\"#s1\" class=\"hnum\">1</a> <span>Intro</span></h1>"));
+        assert!(html.contains("<h2 id=\"s1.1\"><span id=\"details\" class=\"section-anchor\" aria-hidden=\"true\"></span><a href=\"#s1.1\" class=\"hnum\">1.1</a> <span>Details</span></h2>"));
     }
 
     #[test]
