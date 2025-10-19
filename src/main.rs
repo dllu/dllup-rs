@@ -276,10 +276,7 @@ fn generate_sitemap(site_root: &Path, pages: &[ProcessedPage]) -> Result<(), Str
         })?;
         let relative_url_path = pathbuf_to_url_path(rel_path);
 
-        let page_root_url = page
-            .root_url
-            .as_deref()
-            .or_else(|| global_root_url.as_deref());
+        let page_root_url = page.root_url.as_deref().or(global_root_url.as_deref());
 
         let loc = if let Some(root_url) = page_root_url {
             build_blog_href(Some(root_url), &relative_url_path)
@@ -424,10 +421,7 @@ fn git_last_commit_time(
 
         let parent_tree = if commit.parent_count() > 0 {
             match commit.parent(0) {
-                Ok(parent) => match parent.tree() {
-                    Ok(t) => Some(t),
-                    Err(_) => None,
-                },
+                Ok(parent) => parent.tree().ok(),
                 Err(_) => None,
             }
         } else {
@@ -729,7 +723,7 @@ fn build_blog_relative_url(blog_dir: &str, slug: &str) -> String {
 fn build_blog_href(root_url: Option<&str>, relative: &str) -> String {
     let trimmed_relative = relative.trim_start_matches('/');
     match root_url {
-        Some(root) if root == "/" => format!("/{}", trimmed_relative),
+        Some("/") => format!("/{}", trimmed_relative),
         Some(root) => {
             let mut base = root.trim_end_matches('/').to_string();
             if !trimmed_relative.is_empty() {
@@ -812,12 +806,7 @@ fn generate_rss_feed(
                 value: entry.permalink.clone(),
             },
             pub_date: entry.date_key.and_then(date_key_to_rfc2822),
-            description: entry
-                .summary
-                .as_ref()
-                .map(String::as_str)
-                .unwrap_or(&entry.title)
-                .to_string(),
+            description: entry.summary.as_deref().unwrap_or(&entry.title).to_string(),
         })
         .collect();
 

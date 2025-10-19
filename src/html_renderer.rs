@@ -909,10 +909,7 @@ fn highlight_with_inkjet(language: Option<&str>, code: &str) -> Option<String> {
     let lang = language.and_then(Language::from_token).unwrap_or_else(|| {
         Language::from_token("plaintext").unwrap_or(Language::from_token("none").unwrap())
     });
-    match highlighter.highlight_to_string(lang, &formatter, code) {
-        Ok(s) => Some(s),
-        Err(_) => None,
-    }
+    highlighter.highlight_to_string(lang, &formatter, code).ok()
 }
 
 pub fn wrap_html_document(

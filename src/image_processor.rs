@@ -185,7 +185,7 @@ impl ImageProcessor {
                 prefixed.extend_from_slice(&bytes);
                 prefixed
             });
-        let original_orientation = exif_data.as_ref().and_then(|data| exif_orientation(data));
+        let original_orientation = exif_data.as_ref().and_then(exif_orientation);
 
         let mut image = image::load_from_memory(&source.bytes)
             .map_err(|e| ImageError::Decode(e.to_string()))?;
@@ -245,7 +245,7 @@ impl ImageProcessor {
         }
 
         variants.sort_by_key(|v| v.width);
-        let entries = exif_data.as_ref().map(|data| summarize_exif(data));
+        let entries = exif_data.as_ref().map(summarize_exif);
         let original_variant = ImageVariant {
             width,
             height,
@@ -392,7 +392,7 @@ impl ImageProcessor {
         }
         variants.sort_by_key(|v| v.width);
 
-        let entries = exif_data.map(|data| summarize_exif(data));
+        let entries = exif_data.map(summarize_exif);
 
         Some(ProcessedImage {
             variants,
@@ -648,8 +648,7 @@ fn insert_exif_segment(jpeg: &mut Vec<u8>, exif_data: &[u8]) {
             jpeg.drain(scan..end);
             break;
         }
-        if marker == 0xD8 || marker == 0xD9 || marker == 0x01 || (marker >= 0xD0 && marker <= 0xD7)
-        {
+        if marker == 0xD8 || marker == 0xD9 || marker == 0x01 || (0xD0..=0xD7).contains(&marker) {
             scan += 2;
             continue;
         }
@@ -664,7 +663,7 @@ fn insert_exif_segment(jpeg: &mut Vec<u8>, exif_data: &[u8]) {
     let mut insert_pos = 2;
     while insert_pos + 4 <= jpeg.len() && jpeg[insert_pos] == 0xFF {
         let marker = jpeg[insert_pos + 1];
-        if marker < 0xE0 || marker > 0xEF {
+        if !(0xE0..=0xEF).contains(&marker) {
             break;
         }
         if marker == 0xDA {
@@ -698,7 +697,7 @@ fn apply_orientation(image: DynamicImage, orientation: u16) -> DynamicImage {
     }
 }
 
-fn normalize_exif_orientation(exif_bytes: &mut Vec<u8>) {
+fn normalize_exif_orientation(exif_bytes: &mut [u8]) {
     if exif_bytes.len() < 12 {
         return;
     }
@@ -1042,10 +1041,7 @@ fn numbered_filename(base: &str, counter: usize) -> String {
 
 fn sanitize_filename(input: &str) -> String {
     let no_query = input.split(&['?', '#'][..]).next().unwrap_or(input);
-    let base = no_query
-        .rsplit(|c| c == '/' || c == '\\')
-        .next()
-        .unwrap_or(no_query);
+    let base = no_query.rsplit(['/', '\\']).next().unwrap_or(no_query);
     let sanitized: String = base
         .chars()
         .map(|ch| {
