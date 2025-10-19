@@ -574,6 +574,7 @@ fn image_format_from_extension(ext: &str) -> Option<ImageFormat> {
     match ext.to_ascii_lowercase().as_str() {
         "jpg" | "jpeg" => Some(ImageFormat::Jpeg),
         "png" => Some(ImageFormat::Png),
+        "webp" => Some(ImageFormat::WebP),
         _ => None,
     }
 }
@@ -582,6 +583,7 @@ fn extension_for_format(format: ImageFormat) -> Option<&'static str> {
     match format {
         ImageFormat::Jpeg => Some("jpg"),
         ImageFormat::Png => Some("png"),
+        ImageFormat::WebP => Some("webp"),
         _ => None,
     }
 }
@@ -1071,4 +1073,22 @@ fn load_cached_dimensions(original_path: &Path) -> Option<(u32, u32)> {
 fn save_cached_dimensions(original_path: &Path, width: u32, height: u32) -> Result<(), io::Error> {
     let cache_path = dimension_cache_path(original_path);
     fs::write(cache_path, format!("{} {}\n", width, height))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detects_webp_extension() {
+        assert!(matches!(
+            image_format_from_extension("webp"),
+            Some(ImageFormat::WebP)
+        ));
+    }
+
+    #[test]
+    fn webp_extension_roundtrip() {
+        assert_eq!(extension_for_format(ImageFormat::WebP), Some("webp"));
+    }
 }
