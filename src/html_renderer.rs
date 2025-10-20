@@ -9,7 +9,7 @@ use inkjet::{Highlighter, Language};
 use regex::Regex;
 use std::borrow::Cow;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub struct HtmlRenderer {
     engine: Option<Box<dyn MathEngine>>, // external command or none
@@ -984,7 +984,8 @@ pub fn wrap_html_document(
     let template = fs::read_to_string(template_path)
         .map_err(|e| format!("failed to read HTML template {}: {}", template_path, e))?;
 
-    let css_href = html_escape_attr(&css_href_with_root(config));
+    let css_href_resolved = prepare_css_href(config)?;
+    let css_href = html_escape_attr(&css_href_resolved);
 
     Ok(template
         .replace("{{title}}", &html_escape_attr(title))
@@ -995,8 +996,57 @@ pub fn wrap_html_document(
         .replace("{{body}}", body))
 }
 
-fn css_href_with_root(config: &config::Config) -> String {
+fn prepare_css_href(config: &config::Config) -> Result<String, String> {
     let raw = config.html.css_href.trim();
+    if raw.is_empty() {
+        return Ok(String::new());
+    }
+    if css_is_remote(raw) {
+        return Ok(raw.to_string());
+    }
+
+    let (source_path, location) = stylesheet_source_path(raw);
+    let contents = fs::read(&source_path)
+        .map_err(|e| format!("failed to read stylesheet {}: {}", source_path.display(), e))?;
+    let hash = blake3::hash(&contents);
+    let hash_hex = hash.to_hex().to_string();
+    let short_hash = &hash_hex[..12];
+
+    let hashed_source_path =
+        append_hash_to_filename(&source_path, short_hash).map_err(|e| e.to_string())?;
+    if let Some(parent) = hashed_source_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("failed to ensure directory {}: {}", parent.display(), e))?;
+    }
+    fs::write(&hashed_source_path, &contents).map_err(|e| {
+        format!(
+            "failed to write hashed stylesheet {}: {}",
+            hashed_source_path.display(),
+            e
+        )
+    })?;
+
+    let hashed_path_str = hashed_source_path.to_string_lossy().replace('\\', "/");
+
+    let public_path = match location {
+        StylesheetLocation::RootRelative => {
+            format!("/{}", hashed_path_str.trim_start_matches('/'))
+        }
+        _ => hashed_path_str,
+    };
+
+    let final_href = match location {
+        StylesheetLocation::Relative | StylesheetLocation::RootRelative => {
+            css_href_with_root(config, &public_path)
+        }
+        StylesheetLocation::Absolute => public_path,
+    };
+
+    Ok(final_href)
+}
+
+fn css_href_with_root(config: &config::Config, raw: &str) -> String {
+    let raw = raw.trim();
     if raw.is_empty() {
         return String::new();
     }
@@ -1019,6 +1069,67 @@ fn css_href_with_root(config: &config::Config) -> String {
         }
         _ => raw.to_string(),
     }
+}
+
+fn css_is_remote(href: &str) -> bool {
+    if href.starts_with("//") {
+        return true;
+    }
+    if let Some(pos) = href.find(':') {
+        let scheme = &href[..pos];
+        if scheme.len() == 1 && scheme.chars().all(|c| c.is_ascii_alphabetic()) {
+            // Likely a Windows drive letter.
+            return false;
+        }
+        return true;
+    }
+    false
+}
+
+fn stylesheet_source_path(raw: &str) -> (PathBuf, StylesheetLocation) {
+    if raw.starts_with('/') && !raw.starts_with("//") {
+        let absolute = Path::new(raw);
+        if absolute.exists() {
+            return (absolute.to_path_buf(), StylesheetLocation::Absolute);
+        }
+        return (
+            Path::new(raw.trim_start_matches('/')).to_path_buf(),
+            StylesheetLocation::RootRelative,
+        );
+    }
+
+    let path = Path::new(raw);
+    if path.is_absolute() {
+        (path.to_path_buf(), StylesheetLocation::Absolute)
+    } else {
+        (path.to_path_buf(), StylesheetLocation::Relative)
+    }
+}
+
+fn append_hash_to_filename(path: &Path, hash: &str) -> Result<PathBuf, &'static str> {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or("stylesheet path is missing a valid file name")?;
+    let (stem, extension) = match file_name.rsplit_once('.') {
+        Some((stem, ext)) if !stem.is_empty() && !ext.is_empty() => (stem, Some(ext)),
+        _ if !file_name.is_empty() => (file_name, None),
+        _ => return Err("stylesheet path has an empty file name"),
+    };
+
+    let hashed_name = match extension {
+        Some(ext) => format!("{}-{}.{}", stem, hash, ext),
+        None => format!("{}-{}", stem, hash),
+    };
+
+    Ok(path.with_file_name(hashed_name))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StylesheetLocation {
+    Relative,
+    RootRelative,
+    Absolute,
 }
 
 fn is_relative_href(href: &str) -> bool {
@@ -1148,7 +1259,7 @@ mod tests {
             ..Default::default()
         };
         cfg.html.css_href = "static/styles.css".into();
-        let href = super::css_href_with_root(&cfg);
+        let href = super::css_href_with_root(&cfg, "static/styles.css");
         assert_eq!(href, "https://example.com/blog/static/styles.css");
     }
 
@@ -1159,8 +1270,71 @@ mod tests {
             ..Default::default()
         };
         cfg.html.css_href = "/assets/styles.css".into();
-        let href = super::css_href_with_root(&cfg);
+        let href = super::css_href_with_root(&cfg, "/assets/styles.css");
         assert_eq!(href, "https://example.com/assets/styles.css");
+    }
+
+    #[test]
+    fn prepare_css_href_hashes_stylesheet_and_applies_root() {
+        use std::fs;
+
+        let css_dir = PathBuf::from("target/test_styles");
+        fs::create_dir_all(&css_dir).unwrap();
+        let css_path = css_dir.join("styles.css");
+        fs::write(&css_path, "body { background: #123; }").unwrap();
+
+        let mut cfg = crate::config::Config {
+            root_url: Some("https://example.com/site".into()),
+            ..Default::default()
+        };
+        cfg.html.css_href = css_path.to_string_lossy().into_owned();
+
+        let href = super::prepare_css_href(&cfg).unwrap();
+
+        let contents = fs::read(&css_path).unwrap();
+        let hash = blake3::hash(&contents).to_hex().to_string();
+        let short_hash = &hash[..12];
+        let expected_path = css_path.with_file_name(format!("styles-{}.css", short_hash));
+        assert!(
+            expected_path.exists(),
+            "expected hashed stylesheet at {}",
+            expected_path.display()
+        );
+
+        let expected_rel =
+            format!("target/test_styles/styles-{}.css", short_hash).replace('\\', "/");
+        assert_eq!(href, format!("https://example.com/site/{}", expected_rel));
+    }
+
+    #[test]
+    fn prepare_css_href_respects_absolute_paths() {
+        use std::fs;
+        use tempfile::tempdir;
+
+        let tmp = tempdir().unwrap();
+        let css_path = tmp.path().join("styles.css");
+        fs::write(&css_path, "body { color: blue; }").unwrap();
+
+        let mut cfg = crate::config::Config {
+            root_url: Some("https://example.com/site".into()),
+            ..Default::default()
+        };
+        cfg.html.css_href = css_path.to_string_lossy().into_owned();
+
+        let href = super::prepare_css_href(&cfg).unwrap();
+
+        let contents = fs::read(&css_path).unwrap();
+        let hash = blake3::hash(&contents).to_hex().to_string();
+        let short_hash = &hash[..12];
+        let expected_path = css_path.with_file_name(format!("styles-{}.css", short_hash));
+        assert!(
+            expected_path.exists(),
+            "expected hashed stylesheet at {}",
+            expected_path.display()
+        );
+
+        let expected_str = expected_path.to_string_lossy().replace('\\', "/");
+        assert_eq!(href, expected_str);
     }
 
     #[test]
