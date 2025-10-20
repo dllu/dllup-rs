@@ -28,6 +28,8 @@ img_root_url = "file:///home/dllu/proj/dllup-rs/img"
 # Target responsive widths (in pixels) that will be generated for every raster image
 sizes = [600, 1200, 3840, 7680]
 
+meta_size = 1200
+
 # Subset of `sizes` used for the <img> srcset attribute
 display_sizes = [600, 1200, 3840]
 

@@ -1,5 +1,69 @@
-hello world!
+Daniel Lawrence Lu
 
 ===
 
-hi welcome to my website
+Hi welcome to my website!!!
+
+pic porsche.svg : Purple Puppy driving a Porsche 356A Speedster
+
+Here's my blog, where I write about photography, programming and engineering projects, and random stuff:
+
+:: blog blog
+
+# Work
+
+I work in what's called _Spatial AI_ nowadays. Basically, I have a decade of experience in making sense of the 3D world via [simultaneous localization and mapping (SLAM)](https://en.wikipedia.org/wiki/Simultaneous_localization_and_mapping) with lidar, cameras, and other sensors, and more recently, stuff like Gaussian splatting. I currently work at NVIDIA on their self driving car project, on context fusion.
+
+pic lidar3.png Lidar point cloud : Lidar point cloud.
+
+* **2025--present**: [NVIDIA DRIVE](https://developer.nvidia.com/drive) IC5
+* **2023--2025**: [Main Street Autonomy](https://mainstreetautonomy.com) Startup software engineer
+* **2021--2023**: [Tesla](https://tesla.com/) Senior software engineer, Autopilot
+* **2020--2021**: [Tempus Ex Machina](https://tempus-ex.com/) Staff software engineer, computer vision
+* **2016--2020**: [Ouster](https://ouster.io/) Software engineer, mapping
+
+:: resume.pdf resume
+
+# Education
+
+* **2014--2016**: [Carnegie Mellon University, M.S. Robotics](https://www.ri.cmu.edu/ri_static_content.html?menu_id=469)
+* **2008--2014**: [University of British Columbia, B.A.Sc. Eng. Phys.](https://www.engphys.ubc.ca/)
+
+At CMU, my advisor was [George Kantor](https://www.ri.cmu.edu/person.html?person_id=717).
+I worked on [SLAM](https://en.wikipedia.org/wiki/Simultaneous_localization_and_mapping) using a combination of cameras and a lidar, for an autonomous off-road vehicle.
+
+My thesis is called [Vision-Enhanced Lidar Odometry and Mapping](/public/thesis.pdf). It is about combining several different SLAM algorithms, each with different strengths and weaknesses, so that a robot can function robustly in many different environments.
+
+# Contact
+
+My email address is the same as my full name except with an '@' in between my first and middle names and a dot between my middle and last name.
+
+:: email mailto:daniel@lawrence.lu
+
+On many websites I have the username `dllu` except some websites where I was too late and the four letter username was already taken.
+
+| website | link |
+|-
+| github | [github.com/dllu](https://github.com/dllu) |
+| x | [x.com/dllu](https://x.com/dllu) |
+| wikipedia | [en.wikipedia.org/wiki/User:dllu](https://en.wikipedia.org/wiki/User:dllu) |
+| hacker news | [news.ycombinator.com/user?id=dllu](https://news.ycombinator.com/user?id=dllu) |
+| reddit | [reddit.com/u/dllu](https://reddit.com/u/dllu) |
+Links to my account on various websites.
+
+# Publications
+
+## Journal papers
+
+* **Daniel Lu**. (2015) Planar lower envelope of monotone polygonal chains. _Information Processing Letters_, 115(12), 962-964. [doi:10.1016/j.ipl.2015.07.004](https://dx.doi.org/10.1016/j.ipl.2015.07.004), [arXiv:1412.6619](https://arxiv.org/abs/1412.6619)
+
+## Preprints
+
+* **Daniel Lu**. (2015) Generalization of elementary cellular automata to a higher dimension family including the BML traffic model. [arXiv:1501.00733](https://arxiv.org/abs/1501.00733)
+* Paul Liu and **Daniel Lu**. (2014) A fast 25/6-approximation for the minimum unit disk cover problem. [arXiv:1406.3838](https://arxiv.org/abs/1406.3838)
+
+## Technical reports
+
+* **Daniel Lu**. (2016) Vision-Enhanced Lidar Odometry and Mapping. _Masters Thesis_. [pdf link](/public/thesis.pdf)
+* **Daniel Lu**. (2015) Offline estimation of vehicular inertial parameters using onboard lidar. [webpage](/programming/inertial), [pdf link](https://lawrence.lu/public/report_16-711.pdf)
+* **Daniel Lu**, Anson Liang, Richard Lee. (2012) Quaffle: Design of an Autonomous Quadrotor. [webpage](/engineering/quaffle/), [pdf link](https://lawrence.lu/public/quaffle.pdf)

@@ -46,6 +46,7 @@ pub struct ImagesConfig {
     pub img_root_url: Option<String>,
     pub sizes: Vec<u32>,
     pub display_sizes: Vec<u32>,
+    pub meta_size: Option<u32>,
     pub jpeg_quality: u8,
     pub layout_width: u32,
     pub remote_fetch_timeout_secs: u64,
@@ -83,6 +84,7 @@ impl Default for ImagesConfig {
             img_root_url: None,
             sizes: vec![480, 800, 1200],
             display_sizes: Vec::new(),
+            meta_size: None,
             jpeg_quality: 85,
             layout_width: 1200,
             remote_fetch_timeout_secs: 10,
@@ -148,6 +150,15 @@ impl ImagesConfig {
         if self.layout_width == 0 {
             self.layout_width = 1200;
         }
+        self.meta_size = self.meta_size.and_then(|value| {
+            if value == 0 {
+                None
+            } else if self.sizes.binary_search(&value).is_ok() {
+                Some(value)
+            } else {
+                None
+            }
+        });
         self.jpeg_quality = self.jpeg_quality.clamp(10, 100);
         if self.remote_fetch_timeout_secs == 0 {
             self.remote_fetch_timeout_secs = 10;

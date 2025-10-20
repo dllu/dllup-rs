@@ -577,3 +577,25 @@ canvas {
     display: table-cell;
     padding: 5px 10px;
 }
+
+#rootnav {
+    display: flex;
+    flex-flow: row wrap;
+    background: var(--lgrey);
+}
+#rootnav a, #rootnav a:visited {
+    color: var(--grey);
+}
+#rootnav a:hover, #rootnav a:focus {
+    background: var(--grey);
+    color: var(--light);
+}
+#rootnav a {
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.9em;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 0.5em 0em;
+    flex: 1 0 auto;
+}

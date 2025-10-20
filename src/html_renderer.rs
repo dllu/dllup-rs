@@ -335,6 +335,56 @@ impl HtmlRenderer {
         self.meta_image = Some(resolved.into_owned());
     }
 
+    fn capture_meta_image_from_variants(
+        &mut self,
+        variants: &[(&image_processor::ImageVariant, bool)],
+    ) {
+        if self.meta_image.is_some() || variants.is_empty() {
+            return;
+        }
+        if let Some(url) = self.pick_meta_image_variant_url(variants) {
+            self.capture_image(&url);
+        }
+    }
+
+    fn pick_meta_image_variant_url(
+        &self,
+        variants: &[(&image_processor::ImageVariant, bool)],
+    ) -> Option<String> {
+        if variants.is_empty() {
+            return None;
+        }
+        if let Some(target_width) = self.config.images.meta_size {
+            if let Some(url) = variants
+                .iter()
+                .find(|(variant, _)| variant.width == target_width)
+                .map(|(variant, _)| variant.url.clone())
+            {
+                return Some(url);
+            }
+            if let Some(url) = variants
+                .iter()
+                .filter(|(variant, _)| variant.width < target_width)
+                .max_by_key(|(variant, _)| variant.width)
+                .map(|(variant, _)| variant.url.clone())
+            {
+                return Some(url);
+            }
+            if let Some(url) = variants
+                .iter()
+                .filter(|(variant, _)| variant.width > target_width)
+                .min_by_key(|(variant, _)| variant.width)
+                .map(|(variant, _)| variant.url.clone())
+            {
+                return Some(url);
+            }
+        }
+        variants
+            .iter()
+            .max_by_key(|(variant, _)| variant.width)
+            .map(|(variant, _)| variant.url.clone())
+    }
+
     fn render_image_figure(
         &mut self,
         url: &str,
@@ -400,9 +450,7 @@ impl HtmlRenderer {
 
         available_variants.sort_by_key(|(variant, _)| variant.width);
 
-        if let Some((variant, _)) = available_variants.last() {
-            self.capture_image(&variant.url);
-        }
+        self.capture_meta_image_from_variants(&available_variants);
 
         let mut figure = String::new();
         let class_attr = if processed.is_wide {
@@ -1081,8 +1129,10 @@ mod tests {
 
     #[test]
     fn root_url_prefixes_internal_links() {
-        let mut cfg = crate::config::Config::default();
-        cfg.root_url = Some("https://example.com".into());
+        let cfg = crate::config::Config {
+            root_url: Some("https://example.com".into()),
+            ..Default::default()
+        };
         let mut r = renderer_with_config(cfg);
         let html = r.render_inlines(&[InlineElement::Link {
             text: vec![InlineElement::Text("link".into())],
@@ -1093,8 +1143,10 @@ mod tests {
 
     #[test]
     fn css_href_respects_root_for_relative_paths() {
-        let mut cfg = crate::config::Config::default();
-        cfg.root_url = Some("https://example.com/blog".into());
+        let mut cfg = crate::config::Config {
+            root_url: Some("https://example.com/blog".into()),
+            ..Default::default()
+        };
         cfg.html.css_href = "static/styles.css".into();
         let href = super::css_href_with_root(&cfg);
         assert_eq!(href, "https://example.com/blog/static/styles.css");
@@ -1102,8 +1154,10 @@ mod tests {
 
     #[test]
     fn css_href_respects_root_for_root_relative_paths() {
-        let mut cfg = crate::config::Config::default();
-        cfg.root_url = Some("https://example.com".into());
+        let mut cfg = crate::config::Config {
+            root_url: Some("https://example.com".into()),
+            ..Default::default()
+        };
         cfg.html.css_href = "/assets/styles.css".into();
         let href = super::css_href_with_root(&cfg);
         assert_eq!(href, "https://example.com/assets/styles.css");
@@ -1148,8 +1202,10 @@ mod tests {
         let image_path = assets.join("meta.png");
         write_test_png(&image_path);
 
-        let mut cfg = crate::config::Config::default();
-        cfg.root_url = Some("https://example.com/posts".into());
+        let mut cfg = crate::config::Config {
+            root_url: Some("https://example.com/posts".into()),
+            ..Default::default()
+        };
         cfg.images.cache_dir = assets.join("img").to_string_lossy().into_owned();
         cfg.images.img_root_url = Some("https://cdn.example.com/images".into());
         cfg.images.sizes = vec![480, 800];
@@ -1217,6 +1273,61 @@ mod tests {
             rest_joined.contains("<meta name=\"robots\" content=\"max-image-preview:large\">"),
             "missing robots meta: {}",
             rest_joined
+        );
+    }
+
+    #[test]
+    fn meta_image_prefers_configured_size() {
+        use crate::parser::Parser;
+        use tempfile::tempdir;
+
+        let tmp = tempdir().unwrap();
+        let assets = tmp.path();
+        let image_path = assets.join("large.png");
+        let img = RgbImage::from_pixel(2000, 1000, Rgb([0, 128, 255]));
+        img.save(&image_path).unwrap();
+
+        let mut cfg = crate::config::Config {
+            root_url: Some("https://example.com/posts".into()),
+            ..Default::default()
+        };
+        cfg.images.cache_dir = assets.join("cache").to_string_lossy().into_owned();
+        cfg.images.img_root_url = Some("https://cdn.example.com/images".into());
+        cfg.images.sizes = vec![600, 1200, 3840];
+        cfg.images.meta_size = Some(1200);
+        cfg.images.layout_width = 1200;
+
+        let source = format!(
+            "Sized Meta\n\n===\n\npic {} : Meta sized image\n",
+            image_path.display()
+        );
+        let mut parser = Parser::default();
+        parser.parse(&source);
+
+        let mut renderer = HtmlRenderer {
+            engine: None,
+            memo_math: std::collections::HashMap::new(),
+            config: cfg.clone(),
+            toc: Vec::new(),
+            section_counters: Vec::new(),
+            meta_description: None,
+            meta_image: None,
+            image_processor: crate::image_processor::ImageProcessor::new(&cfg),
+            asset_root: assets.to_path_buf(),
+        };
+
+        renderer.render(&parser.article);
+        let metas = renderer.meta_tags("Sized Meta");
+        let image_line = metas.lines().next().expect("og:image meta");
+        assert!(
+            image_line.contains("large-1200"),
+            "expected meta image variant, got {}",
+            image_line
+        );
+        assert!(
+            !image_line.contains("large.png\""),
+            "expected original not to be used in meta: {}",
+            image_line
         );
     }
 }
