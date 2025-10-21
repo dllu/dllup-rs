@@ -57,6 +57,7 @@ pub struct ImagesConfig {
 pub struct FeedConfig {
     pub enabled: bool,
     pub output_path: String,
+    pub channel_title: Option<String>,
     pub title: Option<String>,
     pub description: Option<String>,
     pub link: Option<String>,
@@ -68,6 +69,7 @@ impl Default for FeedConfig {
         Self {
             enabled: true,
             output_path: "rss.xml".into(),
+            channel_title: None,
             title: None,
             description: None,
             link: None,
@@ -184,6 +186,15 @@ impl FeedConfig {
         } else {
             self.output_path = trimmed.to_string();
         }
+
+        self.channel_title = self.channel_title.as_ref().and_then(|t| {
+            let trimmed = t.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        });
 
         self.title = self.title.as_ref().and_then(|t| {
             let trimmed = t.trim();

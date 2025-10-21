@@ -11,12 +11,15 @@ mod parser;
 use crate::ast::{Block, InlineElement};
 use git2::{DiffOptions, Repository, Status};
 use parser::Parser;
+use rayon::prelude::*;
 use serde::Serialize;
 use serde_xml_rs::to_string;
+use std::collections::{BTreeMap, HashMap};
 use std::convert::TryFrom;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::Instant;
 use time::{
     format_description::well_known::{Rfc2822, Rfc3339},
@@ -27,6 +30,29 @@ struct ProcessedPage {
     output_path: PathBuf,
     source_path: PathBuf,
     root_url: Option<String>,
+}
+
+#[derive(Clone)]
+struct BlogPostIndexEntry {
+    title: String,
+    date_display: String,
+    date_key: Option<(i32, u32, u32)>,
+    display_href: String,
+    permalink: String,
+    summary: Option<String>,
+    content_html: String,
+}
+
+struct BlogIndex {
+    html: String,
+    entries: Vec<BlogPostIndexEntry>,
+    directory: PathBuf,
+    blog_dir: PathBuf,
+}
+
+lazy_static! {
+    static ref BLOG_POST_CACHE: Mutex<HashMap<PathBuf, BlogPostIndexEntry>> =
+        Mutex::new(HashMap::new());
 }
 
 #[derive(Serialize)]
@@ -49,6 +75,8 @@ struct SitemapUrl {
 struct RssFeed {
     #[serde(rename = "@version")]
     version: &'static str,
+    #[serde(rename = "@xmlns:content")]
+    content_namespace: &'static str,
     channel: RssChannel,
 }
 
@@ -71,6 +99,8 @@ struct RssItem {
     #[serde(rename = "pubDate", skip_serializing_if = "Option::is_none")]
     pub_date: Option<String>,
     description: String,
+    #[serde(rename = "content:encoded", skip_serializing_if = "Option::is_none")]
+    content_encoded: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -115,10 +145,20 @@ fn main() {
             std::process::exit(1);
         }
 
-        let mut processed_pages = Vec::new();
+        let mut files_by_depth: BTreeMap<usize, Vec<PathBuf>> = BTreeMap::new();
         for file in files {
-            match process_file(&file, Some(input_path), explicit_config.as_ref()) {
-                Ok(page) => processed_pages.push(page),
+            let depth = file.components().count();
+            files_by_depth.entry(depth).or_default().push(file);
+        }
+
+        let mut processed_pages = Vec::new();
+        for (_depth, group) in files_by_depth.into_iter().rev() {
+            let result: Result<Vec<_>, String> = group
+                .into_par_iter()
+                .map(|file| process_file(&file, Some(input_path), explicit_config.as_ref()))
+                .collect();
+            match result {
+                Ok(mut pages) => processed_pages.append(&mut pages),
                 Err(e) => {
                     eprintln!("{}", e);
                     std::process::exit(1);
@@ -183,6 +223,7 @@ fn process_file(
         .as_ref()
         .map(|idx| idx.html.as_str())
         .unwrap_or("");
+    register_blog_post_if_applicable(input_path, site_root, &config, &parser.article, &body);
     let html =
         html_renderer::wrap_html_document(&config, title, &body, toc_str, &metas, index_html_str)
             .map_err(|e| e.to_string())?;
@@ -486,7 +527,11 @@ fn collect_dllu_files(dir: &Path) -> Result<Vec<PathBuf>, String> {
         }
     }
 
-    files.sort();
+    files.sort_by(|a, b| {
+        let depth_a = a.components().count();
+        let depth_b = b.components().count();
+        depth_b.cmp(&depth_a).then_with(|| a.cmp(b))
+    });
     Ok(files)
 }
 
@@ -528,103 +573,137 @@ fn build_blog_index(
         return Ok(None);
     }
 
-    let mut entries = Vec::new();
-    let blog_dir_entries = fs::read_dir(parent_dir).map_err(|e| {
-        format!(
-            "Failed to read blog directory {}: {}",
-            parent_dir.display(),
-            e
-        )
-    })?;
+    let blog_root = if let Some(root) = site_root {
+        root.join(&blog_path)
+    } else {
+        parent_dir.to_path_buf()
+    };
 
-    for entry in blog_dir_entries {
-        let entry = entry
-            .map_err(|e| format!("Failed to read entry in {}: {}", parent_dir.display(), e))?;
-        let file_type = entry.file_type().map_err(|e| {
+    let mut entries: Vec<BlogPostIndexEntry> = {
+        let cache = BLOG_POST_CACHE
+            .lock()
+            .expect("blog post cache mutex poisoned");
+        cache
+            .iter()
+            .filter_map(|(dir, entry)| {
+                if dir
+                    .parent()
+                    .map(|p| p == blog_root.as_path())
+                    .unwrap_or(false)
+                {
+                    Some(entry.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    };
+
+    if entries.is_empty() {
+        let blog_dir_entries = fs::read_dir(parent_dir).map_err(|e| {
             format!(
-                "Failed to read entry type {}: {}",
-                entry.path().display(),
+                "Failed to read blog directory {}: {}",
+                parent_dir.display(),
                 e
             )
         })?;
-        if !file_type.is_dir() {
-            continue;
-        }
 
-        let post_dir = entry.path();
-        let source = match find_blog_article_source(&post_dir)? {
-            Some(path) => path,
-            None => continue,
-        };
-
-        let contents = match fs::read_to_string(&source) {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("Failed to read blog post {}: {}", source.display(), e);
+        for entry in blog_dir_entries {
+            let entry = entry
+                .map_err(|e| format!("Failed to read entry in {}: {}", parent_dir.display(), e))?;
+            let file_type = entry.file_type().map_err(|e| {
+                format!(
+                    "Failed to read entry type {}: {}",
+                    entry.path().display(),
+                    e
+                )
+            })?;
+            if !file_type.is_dir() {
                 continue;
             }
-        };
 
-        let mut parser = Parser::default();
-        parser.parse(&contents);
-        let header = match parser.article.header.as_ref() {
-            Some(h) => h,
-            None => {
+            let post_dir = entry.path();
+            let source = match find_blog_article_source(&post_dir)? {
+                Some(path) => path,
+                None => continue,
+            };
+
+            let contents = match fs::read_to_string(&source) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("Failed to read blog post {}: {}", source.display(), e);
+                    continue;
+                }
+            };
+
+            let mut parser = Parser::default();
+            parser.parse(&contents);
+            let header = match parser.article.header.as_ref() {
+                Some(h) => h,
+                None => {
+                    eprintln!(
+                        "Blog post {} missing header; skipping from index",
+                        source.display()
+                    );
+                    continue;
+                }
+            };
+
+            let title = header.title.trim();
+            if title.is_empty() {
                 eprintln!(
-                    "Blog post {} missing header; skipping from index",
+                    "Blog post {} missing title; skipping from index",
                     source.display()
                 );
                 continue;
             }
-        };
 
-        let title = header.title.trim();
-        if title.is_empty() {
-            eprintln!(
-                "Blog post {} missing title; skipping from index",
-                source.display()
-            );
-            continue;
+            let date = match header.date.as_deref().map(str::trim) {
+                Some(d) if !d.is_empty() => d,
+                _ => {
+                    eprintln!(
+                        "Blog post {} missing date; skipping from index",
+                        source.display()
+                    );
+                    continue;
+                }
+            };
+
+            let slug = match entry.file_name().into_string() {
+                Ok(name) => name,
+                Err(_) => {
+                    eprintln!(
+                        "Blog directory name {:?} not UTF-8; skipping from index",
+                        entry.file_name()
+                    );
+                    continue;
+                }
+            };
+
+            let summary = first_paragraph_text(&parser.article.body);
+            let asset_root = source
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| post_dir.clone());
+            let mut renderer = html_renderer::HtmlRenderer::with_asset_root(config, asset_root);
+            let content_html = renderer.render(&parser.article);
+            let relative_path = build_blog_relative_url(blog_dir_clean, &slug);
+            let permalink = build_blog_href(config.root_url.as_deref(), &relative_path);
+            let display_href = if config.root_url.is_some() {
+                permalink.clone()
+            } else {
+                slug.clone()
+            };
+            entries.push(BlogPostIndexEntry {
+                title: title.to_string(),
+                date_display: date.to_string(),
+                date_key: parse_date_key(date),
+                display_href,
+                permalink,
+                summary,
+                content_html,
+            });
         }
-
-        let date = match header.date.as_deref().map(str::trim) {
-            Some(d) if !d.is_empty() => d,
-            _ => {
-                eprintln!(
-                    "Blog post {} missing date; skipping from index",
-                    source.display()
-                );
-                continue;
-            }
-        };
-
-        let slug = match entry.file_name().into_string() {
-            Ok(name) => name,
-            Err(_) => {
-                eprintln!(
-                    "Blog directory name {:?} not UTF-8; skipping from index",
-                    entry.file_name()
-                );
-                continue;
-            }
-        };
-
-        let summary = first_paragraph_text(&parser.article.body);
-        let relative_path = build_blog_relative_url(blog_dir_clean, &slug);
-        let permalink = build_blog_href(config.root_url.as_deref(), &relative_path);
-        let display_href = if config.root_url.is_some() {
-            permalink.clone()
-        } else {
-            slug.clone()
-        };
-        entries.push(BlogPostIndexEntry {
-            title: title.to_string(),
-            date_display: date.to_string(),
-            date_key: parse_date_key(date),
-            display_href,
-            permalink,
-            summary,
-        });
     }
 
     if entries.is_empty() {
@@ -657,23 +736,6 @@ fn build_blog_index(
         blog_dir: blog_path,
     }))
 }
-
-struct BlogIndex {
-    html: String,
-    entries: Vec<BlogPostIndexEntry>,
-    directory: PathBuf,
-    blog_dir: PathBuf,
-}
-
-struct BlogPostIndexEntry {
-    title: String,
-    date_display: String,
-    date_key: Option<(i32, u32, u32)>,
-    display_href: String,
-    permalink: String,
-    summary: Option<String>,
-}
-
 fn find_blog_article_source(dir: &Path) -> Result<Option<PathBuf>, String> {
     let index_candidate = dir.join("index.dllu");
     if index_candidate.is_file() {
@@ -772,13 +834,16 @@ fn generate_rss_feed(
     }
 
     let blog_relative_root = pathbuf_to_url_path(&blog_index.blog_dir);
-    let channel_title = feed_cfg.title.clone().unwrap_or_else(|| {
-        if blog_relative_root.is_empty() {
-            "Blog".to_string()
-        } else {
-            blog_relative_root.clone()
-        }
-    });
+    let default_title = if blog_relative_root.is_empty() {
+        "Blog".to_string()
+    } else {
+        blog_relative_root.clone()
+    };
+    let channel_title = feed_cfg
+        .channel_title
+        .clone()
+        .or_else(|| feed_cfg.title.clone())
+        .unwrap_or_else(|| default_title.clone());
     let channel_description = feed_cfg
         .description
         .clone()
@@ -807,11 +872,13 @@ fn generate_rss_feed(
             },
             pub_date: entry.date_key.and_then(date_key_to_rfc2822),
             description: entry.summary.as_deref().unwrap_or(&entry.title).to_string(),
+            content_encoded: Some(entry.content_html.clone()),
         })
         .collect();
 
     let feed = RssFeed {
         version: "2.0",
+        content_namespace: "http://purl.org/rss/1.0/modules/content/",
         channel: RssChannel {
             title: channel_title,
             link: channel_link,
@@ -884,6 +951,107 @@ fn first_paragraph_text(blocks: &[Block]) -> Option<String> {
         }
     }
     None
+}
+
+fn register_blog_post_if_applicable(
+    input_path: &Path,
+    site_root: Option<&Path>,
+    config: &config::Config,
+    article: &ast::Article,
+    rendered_body: &str,
+) {
+    let blog_dir_raw = match config.html.blog_dir.as_deref() {
+        Some(dir) if !dir.trim().is_empty() => dir.trim(),
+        _ => return,
+    };
+
+    let blog_dir_clean = blog_dir_raw.trim_matches('/');
+    if blog_dir_clean.is_empty() {
+        return;
+    }
+
+    let site_root = match site_root {
+        Some(root) => root,
+        None => return,
+    };
+
+    let mut blog_path = PathBuf::new();
+    for segment in blog_dir_clean.split('/') {
+        if !segment.is_empty() {
+            blog_path.push(segment);
+        }
+    }
+
+    let blog_root = site_root.join(&blog_path);
+
+    let post_dir = match input_path.parent() {
+        Some(dir) => dir,
+        None => return,
+    };
+
+    if post_dir == blog_root {
+        return;
+    }
+
+    if post_dir
+        .parent()
+        .map(|parent| parent != blog_root.as_path())
+        .unwrap_or(true)
+    {
+        return;
+    }
+
+    let source = match find_blog_article_source(post_dir) {
+        Ok(Some(path)) => path,
+        _ => return,
+    };
+
+    if source != input_path {
+        return;
+    }
+
+    let header = match article.header.as_ref() {
+        Some(h) => h,
+        None => return,
+    };
+
+    let title = header.title.trim();
+    if title.is_empty() {
+        return;
+    }
+
+    let date = match header.date.as_deref().map(str::trim) {
+        Some(d) if !d.is_empty() => d,
+        _ => return,
+    };
+
+    let slug = match post_dir.file_name().and_then(|s| s.to_str()) {
+        Some(s) => s,
+        None => return,
+    };
+
+    let summary = first_paragraph_text(&article.body);
+    let relative_path = build_blog_relative_url(blog_dir_clean, slug);
+    let permalink = build_blog_href(config.root_url.as_deref(), &relative_path);
+    let display_href = if config.root_url.is_some() {
+        permalink.clone()
+    } else {
+        slug.to_string()
+    };
+
+    let entry = BlogPostIndexEntry {
+        title: title.to_string(),
+        date_display: date.to_string(),
+        date_key: parse_date_key(date),
+        display_href,
+        permalink,
+        summary,
+        content_html: rendered_body.to_string(),
+    };
+
+    if let Ok(mut cache) = BLOG_POST_CACHE.lock() {
+        cache.insert(post_dir.to_path_buf(), entry);
+    }
 }
 
 fn inline_elements_to_plain_text(inlines: &[InlineElement]) -> String {

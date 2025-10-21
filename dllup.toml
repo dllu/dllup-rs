@@ -10,6 +10,10 @@ template_path = "static/template.html"
 # HREF for the page stylesheet. Relative values are joined with root_url.
 css_href = "static/styles.css"
 
+[feed]
+# Optional custom title for the generated RSS feed
+channel_title = "dllup Example Blog"
+
 [math]
 # Try to spawn the persistent Node.js-based KaTeX helper before other options
 prefer_persistent = true
