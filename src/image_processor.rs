@@ -789,7 +789,7 @@ fn summarize_exif(exif: &ExifData) -> ExifSummary {
     }
 
     if let Some(date) = exif_value(exif, ExifTag::DateTimeOriginal) {
-        entries.push(("Original date".to_string(), date));
+        entries.push(("Date".to_string(), date));
     }
 
     ExifSummary { entries }

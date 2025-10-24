@@ -532,16 +532,13 @@ impl HtmlRenderer {
 
         if let Some(exif) = processed.exif.as_ref() {
             if !exif.entries.is_empty() {
-                let mut details = String::from("<details><summary>Image metadata</summary><ul>");
+                figure.push_str("<details><summary>EXIF data</summary><dl>");
                 for (label, value) in &exif.entries {
-                    details.push_str(&format!(
-                        "<li><strong>{}</strong>: {}</li>",
-                        escape_html(label),
-                        escape_html(value)
-                    ));
+                    let (dt, dd) = format_exif_entry(label, value);
+                    figure.push_str(&dt);
+                    figure.push_str(&dd);
                 }
-                details.push_str("</ul></details>");
-                figure.push_str(&details);
+                figure.push_str("</dl></details>");
             }
         }
 
@@ -583,7 +580,9 @@ impl HtmlRenderer {
         }
         downloads.sort_by_key(|entry| entry.width);
 
-        figure.push_str("<ul aria-label=\"download sizes\">");
+        figure.push_str(
+            "<details><summary>Download</summary><nav aria-label=\"Download sizes\"><ul>",
+        );
         for entry in downloads {
             let label = if entry.is_original && entry.mime == "image/svg+xml" {
                 "Original".to_string()
@@ -594,7 +593,7 @@ impl HtmlRenderer {
             };
             figure.push_str(&format!("<li><a href=\"{}\">{}</a></li>", entry.url, label));
         }
-        figure.push_str("</ul>");
+        figure.push_str("</ul></nav></details>");
         figure.push_str("</figcaption></figure>\n");
         figure
     }
@@ -625,9 +624,11 @@ impl HtmlRenderer {
             "<p><a href=\"#{}\" class=\"fignum\">FIGURE {}</a> {}</p>",
             fig_id_attr, fig_id_num, caption_html
         ));
-        figure.push_str("<ul aria-label=\"download sizes\">");
+        figure.push_str(
+            "<details><summary>Download</summary><nav aria-label=\"Download sizes\"><ul>",
+        );
         figure.push_str(&format!("<li><a href=\"{}\">original</a></li>", href));
-        figure.push_str("</ul>");
+        figure.push_str("</ul></nav></details>");
         figure.push_str("</figcaption></figure>\n");
         figure
     }
@@ -740,14 +741,17 @@ impl HtmlRenderer {
             }
             InlineElement::Reference(content) => {
                 let esc = escape_html(content);
-                format!("<a class=\"refname\" href=\"#{}\">{}</a>", esc, esc)
+                format!(
+                    "<a class=\"refname\" href=\"#{}\"><cite>{}</cite></a>",
+                    esc, esc
+                )
             }
             InlineElement::ReferenceAnchor { content, invisible } => {
                 if *invisible {
                     String::new()
                 } else {
                     let esc = escape_html(content);
-                    format!("<span class=\"refname\" id=\"{}\">{}</span>", esc, esc)
+                    format!("<cite class=\"refname\" id=\"{}\">{}</cite>", esc, esc)
                 }
             }
         }
@@ -833,6 +837,169 @@ fn extract_text(elements: &[InlineElement]) -> String {
         }
     }
     out
+}
+
+fn format_exif_entry(label: &str, value: &str) -> (String, String) {
+    let trimmed_label = label.trim();
+    let display_label = if trimmed_label.is_empty() {
+        label
+    } else {
+        trimmed_label
+    };
+    let trimmed_value = value.trim();
+    let dd_inner = match trimmed_label {
+        "Aperture" => {
+            format_exif_aperture(trimmed_value).unwrap_or_else(|| escape_html(trimmed_value))
+        }
+        "Shutter speed" => {
+            format_exif_shutter(trimmed_value).unwrap_or_else(|| escape_html(trimmed_value))
+        }
+        "ISO" => format_exif_iso(trimmed_value).unwrap_or_else(|| escape_html(trimmed_value)),
+        "Date" => {
+            format_exif_datetime(trimmed_value).unwrap_or_else(|| escape_html(trimmed_value))
+        }
+        _ => escape_html(trimmed_value),
+    };
+    let label_html = if trimmed_label.eq_ignore_ascii_case("shutter speed") {
+        "Shutter"
+    } else {
+        display_label
+    };
+    (
+        format!("<dt>{}</dt>", escape_html(label_html)),
+        format!("<dd>{}</dd>", dd_inner),
+    )
+}
+
+fn format_exif_aperture(value: &str) -> Option<String> {
+    let mut numeric_part = value.trim_start_matches(|c: char| c.eq_ignore_ascii_case(&'f'));
+    if numeric_part.starts_with('/') {
+        numeric_part = &numeric_part[1..];
+    }
+    let numeric_part = numeric_part.trim();
+    if numeric_part.is_empty() {
+        return None;
+    }
+    let sanitized = numeric_part.replace(',', ".");
+    let parsed = sanitized.parse::<f64>().ok()?;
+    if !parsed.is_finite() {
+        return None;
+    }
+    let attr = format_decimal(parsed)?;
+    let display = if value.to_ascii_lowercase().starts_with('f') {
+        value.to_string()
+    } else {
+        format!("f/{}", value)
+    };
+    Some(format!(
+        "<data value=\"{}\">{}</data>",
+        html_escape_attr(&attr),
+        escape_html(&display)
+    ))
+}
+
+fn format_exif_shutter(value: &str) -> Option<String> {
+    if value.is_empty() {
+        return None;
+    }
+    let token = value.split_whitespace().next().unwrap_or("");
+    let trimmed_token =
+        token.trim_end_matches(|c: char| !c.is_ascii_digit() && c != '.' && c != '/' && c != ',');
+    if trimmed_token.is_empty() {
+        return None;
+    }
+    let cleaned = trimmed_token.replace(',', ".");
+    if cleaned.is_empty() {
+        return None;
+    }
+    let seconds = if let Some((numerator, denominator)) = cleaned.split_once('/') {
+        let num = numerator.trim().parse::<f64>().ok()?;
+        let den = denominator.trim().parse::<f64>().ok()?;
+        if den == 0.0 {
+            return None;
+        }
+        num / den
+    } else {
+        cleaned.trim().parse::<f64>().ok()?
+    };
+    if !seconds.is_finite() {
+        return None;
+    }
+    let attr = format_decimal(seconds)?;
+    Some(format!(
+        "<data value=\"{}\">{}</data>",
+        html_escape_attr(&attr),
+        escape_html(value)
+    ))
+}
+
+fn format_exif_iso(value: &str) -> Option<String> {
+    let number = extract_first_number(value)?;
+    Some(format!(
+        "<data value=\"{}\">{}</data>",
+        html_escape_attr(&number.to_string()),
+        escape_html(value)
+    ))
+}
+
+fn format_exif_datetime(value: &str) -> Option<String> {
+    let mut parts = value.split_whitespace();
+    let date_part = parts.next()?;
+    let time_part = parts.next()?;
+    let date_parts: Vec<&str> = date_part.split(':').collect();
+    if date_parts.len() != 3 {
+        return None;
+    }
+    let year = date_parts[0].parse::<i32>().ok()?;
+    let month = date_parts[1].parse::<u32>().ok()?;
+    let day = date_parts[2].parse::<u32>().ok()?;
+    let date_iso = format!("{:04}-{:02}-{:02}", year, month, day);
+    let display = format!("{} {}", date_iso, time_part);
+    let datetime_attr = format!("{}T{}", date_iso, time_part);
+    Some(format!(
+        "<time datetime=\"{}\">{}</time>",
+        html_escape_attr(&datetime_attr),
+        escape_html(&display)
+    ))
+}
+
+fn format_decimal(value: f64) -> Option<String> {
+    if !value.is_finite() {
+        return None;
+    }
+    let formatted = trim_trailing_zeros(format!("{:.12}", value));
+    Some(if formatted.is_empty() {
+        "0".into()
+    } else {
+        formatted
+    })
+}
+
+fn trim_trailing_zeros(mut s: String) -> String {
+    if s.contains('.') {
+        while s.ends_with('0') {
+            s.pop();
+        }
+        if s.ends_with('.') {
+            s.pop();
+        }
+    }
+    s
+}
+
+fn extract_first_number(value: &str) -> Option<u32> {
+    let mut digits = String::new();
+    for ch in value.chars() {
+        if ch.is_ascii_digit() {
+            digits.push(ch);
+        } else if !digits.is_empty() {
+            break;
+        }
+    }
+    if digits.is_empty() {
+        return None;
+    }
+    digits.parse::<u32>().ok()
 }
 
 fn escape_html(s: &str) -> String {
@@ -1211,7 +1378,8 @@ mod tests {
         assert!(html.contains("<img src=\""));
         assert!(html.contains("srcset=\""));
         assert!(!html.contains("<picture>"));
-        assert!(html.contains("aria-label=\"download sizes\""));
+        assert!(html.contains("<summary>Download</summary>"));
+        assert!(html.contains("aria-label=\"Download sizes\""));
     }
 
     #[test]
