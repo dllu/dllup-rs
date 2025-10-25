@@ -65,3 +65,14 @@ The template is rendered by replacing `{{title}}`, `{{css}}`, `{{tableofcontents
 * responsive images rendered with `<img>` `srcset` (cached resizing, EXIF-aware layout, downloadable variants)
 * html5 semantic figure and figcaption for images
 * implemented in rust for some reason
+
+## Vim Syntax Highlighting
+
+1. Copy `vim/dllup.vim` into your runtime: `mkdir -p ~/.vim/syntax ~/.vim/ftdetect` and then `cp vim/dllup.vim ~/.vim/syntax/dllup.vim`. For Neovim use `~/.config/nvim` instead of `~/.vim`.
+2. Create `~/.vim/ftdetect/dllup.vim` (or the Neovim equivalent) with:
+
+   ```vim
+   au BufRead,BufNewFile *.dllu,*.dllup set filetype=dllup
+   ```
+
+Reload Vim and files ending in `.dllu` or `.dllup` will pick up the syntax.

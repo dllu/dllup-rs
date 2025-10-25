@@ -512,14 +512,43 @@ impl Parser {
                 } // skip ']'
                 if i < chars.len() && chars[i] == '(' {
                     i += 1; // skip '('
-                    let url_start = i;
-                    while i < chars.len() && chars[i] != ')' {
+                    let mut url = String::new();
+                    let mut escaped = false;
+                    let mut closed = false;
+                    while i < chars.len() {
+                        let ch = chars[i];
+                        if escaped {
+                            url.push(ch);
+                            escaped = false;
+                            i += 1;
+                            continue;
+                        }
+                        if ch == '\\' {
+                            escaped = true;
+                            i += 1;
+                            continue;
+                        }
+                        if ch == ')' {
+                            i += 1; // consume ')'
+                            closed = true;
+                            break;
+                        }
+                        url.push(ch);
                         i += 1;
                     }
-                    let url: String = chars[url_start..i].iter().collect();
-                    if i < chars.len() {
-                        i += 1;
-                    } // skip ')'
+                    if escaped {
+                        // Trailing backslash with no character to escape; keep it literal.
+                        url.push('\\');
+                    }
+                    if !closed {
+                        // No closing ')' found; rewind to treat as literal text.
+                        buffer.push('[');
+                        buffer.push_str(&link_text);
+                        buffer.push(']');
+                        buffer.push('(');
+                        buffer.push_str(&url);
+                        continue;
+                    }
                     elements.push(InlineElement::Link {
                         text: Self::parse_inline_elements(&link_text),
                         url,
