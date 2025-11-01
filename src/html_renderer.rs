@@ -476,6 +476,39 @@ impl HtmlRenderer {
                 srcset_entries.push((*width, self.escape_url(&variant.url)));
             }
         }
+        let max_display_size = self
+            .config
+            .images
+            .display_sizes
+            .iter()
+            .copied()
+            .max()
+            .unwrap_or(0);
+        if max_display_size > 0 {
+            if let Some((original_variant, true)) = available_variants
+                .iter()
+                .find(|(_, is_original)| *is_original)
+            {
+                if original_variant.width < max_display_size
+                    || original_variant.height < max_display_size
+                {
+                    match srcset_entries
+                        .binary_search_by_key(&original_variant.width, |(width, _)| *width)
+                    {
+                        Ok(_) => {}
+                        Err(pos) => {
+                            srcset_entries.insert(
+                                pos,
+                                (
+                                    original_variant.width,
+                                    self.escape_url(&original_variant.url),
+                                ),
+                            );
+                        }
+                    }
+                }
+            }
+        }
         if srcset_entries.is_empty() {
             for (variant, _) in &available_variants {
                 if srcset_entries
@@ -855,9 +888,7 @@ fn format_exif_entry(label: &str, value: &str) -> (String, String) {
             format_exif_shutter(trimmed_value).unwrap_or_else(|| escape_html(trimmed_value))
         }
         "ISO" => format_exif_iso(trimmed_value).unwrap_or_else(|| escape_html(trimmed_value)),
-        "Date" => {
-            format_exif_datetime(trimmed_value).unwrap_or_else(|| escape_html(trimmed_value))
-        }
+        "Date" => format_exif_datetime(trimmed_value).unwrap_or_else(|| escape_html(trimmed_value)),
         _ => escape_html(trimmed_value),
     };
     let label_html = if trimmed_label.eq_ignore_ascii_case("shutter speed") {
@@ -1383,6 +1414,40 @@ mod tests {
     }
 
     #[test]
+    fn render_figure_adds_original_variant_when_smaller_than_display_max() {
+        use tempfile::tempdir;
+
+        let tmp = tempdir().unwrap();
+        let image_path = tmp.path().join("medium.png");
+        let img = RgbImage::from_pixel(640, 480, Rgb([0, 255, 0]));
+        img.save(&image_path).unwrap();
+
+        let mut cfg = crate::config::Config::default();
+        cfg.images.cache_dir = tmp.path().join("cache").to_string_lossy().into_owned();
+        cfg.images.sizes = vec![480, 960];
+        cfg.images.display_sizes = vec![480, 960];
+        cfg.images.layout_width = 960;
+
+        let mut renderer = HtmlRenderer {
+            engine: None,
+            memo_math: std::collections::HashMap::new(),
+            config: cfg.clone(),
+            toc: Vec::new(),
+            section_counters: Vec::new(),
+            meta_description: None,
+            meta_image: None,
+            image_processor: crate::image_processor::ImageProcessor::new(&cfg),
+            asset_root: tmp.path().to_path_buf(),
+        };
+
+        let caption: Vec<InlineElement> = Vec::new();
+        let html = renderer.render_image_figure("medium.png", None, 0, "Medium image", &caption);
+        assert!(html.contains("srcset=\""));
+        assert!(html.contains(" 480w"));
+        assert!(html.contains(" 640w"));
+    }
+
+    #[test]
     fn render_reference_and_anchor() {
         use crate::parser::Parser;
 
@@ -1392,8 +1457,8 @@ mod tests {
 
         let mut renderer = HtmlRenderer::new(&crate::config::Config::default());
         let html = renderer.render(&parser.article);
-        assert!(html.contains("<a class=\"refname\" href=\"#eade\">eade</a>"));
-        assert!(html.contains("<span class=\"refname\" id=\"eade\">eade</span>"));
+        assert!(html.contains("<a class=\"refname\" href=\"#eade\"><cite>eade</cite></a>"));
+        assert!(html.contains("<cite class=\"refname\" id=\"eade\">eade</cite>"));
     }
 
     #[test]
