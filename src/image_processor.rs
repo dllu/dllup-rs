@@ -150,8 +150,19 @@ impl ImageProcessor {
         let layout_limit = self.config.layout_width;
         let svg_dimensions = estimate_svg_dimensions(source.bytes.as_ref())
             .unwrap_or((layout_limit as f64, layout_limit as f64));
+        let scaled_dimensions = if svg_dimensions.0 > 0.0 && svg_dimensions.1 > 0.0 {
+            let max_dim = svg_dimensions.0.max(svg_dimensions.1);
+            if max_dim < layout_limit as f64 {
+                let scale = layout_limit as f64 / max_dim;
+                (svg_dimensions.0 * scale, svg_dimensions.1 * scale)
+            } else {
+                svg_dimensions
+            }
+        } else {
+            svg_dimensions
+        };
         let (display_width, display_height, is_wide) =
-            compute_display_dimensions(svg_dimensions.0, svg_dimensions.1, layout_limit);
+            compute_display_dimensions(scaled_dimensions.0, scaled_dimensions.1, layout_limit);
         let svg_width = display_width.max(1);
         let svg_height = display_height.max(1);
 
