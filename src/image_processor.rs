@@ -203,7 +203,7 @@ impl ImageProcessor {
         let mut exif_bytes_raw = exif_data
             .as_ref()
             .and_then(|data| data.serialize().ok())
-            .map(|bytes| ensure_exif_header(bytes));
+            .map(ensure_exif_header);
         let original_orientation = exif_data.as_ref().and_then(exif_orientation);
 
         if let Some(bytes) = exif_bytes_raw.as_mut() {
@@ -213,7 +213,7 @@ impl ImageProcessor {
 
         let (mut width, mut height) =
             image::image_dimensions(&original_path).map_err(|e| ImageError::Decode(e.to_string()))?;
-        if matches!(original_orientation, Some(5 | 6 | 7 | 8)) {
+        if matches!(original_orientation, Some(5..=8)) {
             std::mem::swap(&mut width, &mut height);
         }
         let (display_width, display_height, is_wide) =
