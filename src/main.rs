@@ -30,6 +30,7 @@ struct ProcessedPage {
     output_path: PathBuf,
     source_path: PathBuf,
     root_url: Option<String>,
+    is_private: bool,
 }
 
 #[derive(Clone)]
@@ -192,6 +193,8 @@ fn process_file(
         }
     };
 
+    let is_private = page_is_private(input_path);
+
     let input = fs::read_to_string(input_path)
         .map_err(|e| format!("Failed to read {}: {}", input_path.display(), e))?;
 
@@ -253,6 +256,7 @@ fn process_file(
         output_path: out_path,
         source_path: input_path.to_path_buf(),
         root_url,
+        is_private,
     })
 }
 
@@ -301,6 +305,10 @@ fn generate_sitemap(site_root: &Path, pages: &[ProcessedPage]) -> Result<(), Str
 
     let mut entries = Vec::new();
     for page in pages {
+        if page.is_private {
+            continue;
+        }
+
         let output_canon = page.output_path.canonicalize().map_err(|e| {
             format!(
                 "Failed to canonicalize output {}: {}",
@@ -535,6 +543,17 @@ fn collect_dllu_files(dir: &Path) -> Result<Vec<PathBuf>, String> {
     Ok(files)
 }
 
+fn directory_has_private_marker(dir: &Path) -> bool {
+    let marker_path = dir.join("private");
+    marker_path.is_file()
+}
+
+fn page_is_private(path: &Path) -> bool {
+    path.parent()
+        .map(directory_has_private_marker)
+        .unwrap_or(false)
+}
+
 fn build_blog_index(
     input_path: &Path,
     site_root: Option<&Path>,
@@ -586,11 +605,11 @@ fn build_blog_index(
         cache
             .iter()
             .filter_map(|(dir, entry)| {
-                if dir
+                let matches_root = dir
                     .parent()
                     .map(|p| p == blog_root.as_path())
-                    .unwrap_or(false)
-                {
+                    .unwrap_or(false);
+                if matches_root && !directory_has_private_marker(dir) {
                     Some(entry.clone())
                 } else {
                     None
@@ -623,6 +642,9 @@ fn build_blog_index(
             }
 
             let post_dir = entry.path();
+            if directory_has_private_marker(&post_dir) {
+                continue;
+            }
             let source = match find_blog_article_source(&post_dir)? {
                 Some(path) => path,
                 None => continue,
@@ -988,6 +1010,10 @@ fn register_blog_post_if_applicable(
         Some(dir) => dir,
         None => return,
     };
+
+    if directory_has_private_marker(post_dir) {
+        return;
+    }
 
     if post_dir == blog_root {
         return;

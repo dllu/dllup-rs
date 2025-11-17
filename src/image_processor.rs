@@ -3,11 +3,13 @@ use image::codecs::gif::GifDecoder;
 use image::codecs::jpeg::JpegEncoder;
 use image::imageops::FilterType;
 use image::{DynamicImage, GenericImageView, ImageDecoder, ImageFormat};
+use rayon::prelude::*;
 use rexif::{parse_buffer_quiet, ExifData, ExifTag, TagValue};
 use roxmltree::Document;
 use std::fs;
 use std::io::{self, Cursor, Read};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 
@@ -48,6 +50,20 @@ struct SourceImage {
     bytes: Vec<u8>,
     format: SourceFormat,
     cached_path: Option<PathBuf>,
+}
+
+#[derive(Clone)]
+struct VariantSpec {
+    width: u32,
+    height: u32,
+    path: PathBuf,
+}
+
+#[derive(Clone)]
+struct VariantJob {
+    width: u32,
+    height: u32,
+    path: PathBuf,
 }
 
 #[derive(Debug, Clone)]
@@ -176,7 +192,7 @@ impl ImageProcessor {
         let original_url = self.public_url_for(&original_path);
         let mime_type = mime_type_for_format(format).to_string();
 
-        let mut exif_bytes = exif_data
+        let mut exif_bytes_raw = exif_data
             .as_ref()
             .and_then(|data| data.serialize().ok())
             .map(|bytes| {
@@ -187,20 +203,21 @@ impl ImageProcessor {
             });
         let original_orientation = exif_data.as_ref().and_then(exif_orientation);
 
-        let mut image = image::load_from_memory(&source.bytes)
+        let mut decoded = image::load_from_memory(&source.bytes)
             .map_err(|e| ImageError::Decode(e.to_string()))?;
         if let Some(orientation) = original_orientation {
-            image = apply_orientation(image, orientation);
+            decoded = apply_orientation(decoded, orientation);
         }
-        if let Some(bytes) = exif_bytes.as_mut() {
+        if let Some(bytes) = exif_bytes_raw.as_mut() {
             normalize_exif_orientation(bytes);
         }
+        let exif_bytes = exif_bytes_raw.map(Arc::new);
 
-        let (width, height) = image.dimensions();
+        let (width, height) = decoded.dimensions();
         let (display_width, display_height, is_wide) =
             compute_display_dimensions(width as f64, height as f64, self.config.layout_width);
+        save_cached_dimensions(&original_path, width, height)?;
 
-        let mut variants: Vec<ImageVariant> = Vec::new();
         let original_stem = original_path
             .file_stem()
             .and_then(|s| s.to_str())
@@ -209,9 +226,9 @@ impl ImageProcessor {
             .unwrap_or_else(|| "image".to_string());
 
         let target_widths = self.target_resize_widths(width, display_width);
-
+        let mut variant_specs: Vec<VariantSpec> = Vec::new();
+        let mut resize_jobs: Vec<VariantJob> = Vec::new();
         for target_width in target_widths {
-            fs::create_dir_all(&self.cache_dir)?;
             let filename = if extension.is_empty() {
                 format!("{}-{}", original_stem, target_width)
             } else {
@@ -221,29 +238,53 @@ impl ImageProcessor {
             let target_height = ((target_width as f64 / width as f64) * height as f64)
                 .round()
                 .max(1.0) as u32;
-
-            let resized = if target_width == width {
-                image.clone()
-            } else {
-                image.resize(target_width, target_height, FilterType::Lanczos3)
-            };
-            let encoded = encode_image(
-                &resized,
-                format,
-                exif_bytes.as_deref(),
-                self.config.jpeg_quality,
-            )?;
-            fs::write(&target_path, &encoded)?;
-
-            let url = self.public_url_for(&target_path);
-            variants.push(ImageVariant {
+            if !target_path.exists() {
+                resize_jobs.push(VariantJob {
+                    width: target_width,
+                    height: target_height,
+                    path: target_path.clone(),
+                });
+            }
+            variant_specs.push(VariantSpec {
                 width: target_width,
                 height: target_height,
-                url,
-                mime_type: mime_type.clone(),
+                path: target_path,
             });
         }
 
+        let mut decoded_image = Some(decoded);
+        if !resize_jobs.is_empty() {
+            fs::create_dir_all(&self.cache_dir)?;
+            let jpeg_quality = self.config.jpeg_quality;
+            let shared_image = Arc::new(decoded_image.take().unwrap());
+            let exif_bytes_for_jobs = exif_bytes.clone();
+            resize_jobs
+                .into_par_iter()
+                .try_for_each(|job| {
+                    let resized =
+                        shared_image.resize(job.width, job.height, FilterType::Lanczos3);
+                    let encoded = encode_image(
+                        &resized,
+                        format,
+                        exif_bytes_for_jobs
+                            .as_ref()
+                            .map(|bytes| bytes.as_slice()),
+                        jpeg_quality,
+                    )?;
+                    fs::write(&job.path, &encoded)?;
+                    Ok::<(), ImageError>(())
+                })?;
+        }
+
+        let mut variants: Vec<ImageVariant> = variant_specs
+            .into_iter()
+            .map(|spec| ImageVariant {
+                width: spec.width,
+                height: spec.height,
+                url: self.public_url_for(&spec.path),
+                mime_type: mime_type.clone(),
+            })
+            .collect();
         variants.sort_by_key(|v| v.width);
         let entries = exif_data.as_ref().map(summarize_exif);
         let original_variant = ImageVariant {
@@ -252,8 +293,6 @@ impl ImageProcessor {
             url: original_url,
             mime_type: mime_type.clone(),
         };
-
-        save_cached_dimensions(&original_path, width, height)?;
 
         Ok(ProcessedImage {
             variants,
@@ -276,32 +315,13 @@ impl ImageProcessor {
 
     fn fetch_remote(&self, reference: &str) -> Result<SourceImage, ImageError> {
         fs::create_dir_all(&self.cache_dir)?;
-        let trimmed = reference.split('?').next().unwrap_or(reference);
-        let raw_name = Path::new(trimmed)
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or(trimmed);
-        let mut filename = sanitize_filename(raw_name);
-        if filename.is_empty() {
-            filename = "image".to_string();
-        }
-        if Path::new(&filename).extension().is_none() {
-            if let Some(ext) = path_extension_from_str(trimmed) {
-                if !ext.is_empty() {
-                    filename.push('.');
-                    filename.push_str(ext);
-                }
-            }
-        }
-        let original_path = self.cache_dir.join(&filename);
-        if original_path.exists() {
-            let bytes = fs::read(&original_path)?;
-            return Ok(SourceImage {
-                reference: reference.to_string(),
-                cached_path: Some(original_path),
-                format: detect_format(reference, &bytes)?,
-                bytes,
-            });
+        let candidates = self.remote_cache_candidates(reference);
+        let primary_path = candidates
+            .first()
+            .cloned()
+            .unwrap_or_else(|| self.cache_dir.join("image"));
+        if let Some(source) = self.try_load_cached_remote(reference, &candidates)? {
+            return Ok(source);
         }
 
         let agent = ureq::AgentBuilder::new()
@@ -321,14 +341,74 @@ impl ImageProcessor {
         let mut reader = response.into_reader();
         let mut buf = Vec::new();
         reader.read_to_end(&mut buf)?;
-        fs::write(&original_path, &buf)?;
+        fs::write(&primary_path, &buf)?;
 
         Ok(SourceImage {
             reference: reference.to_string(),
-            cached_path: Some(original_path),
+            cached_path: Some(primary_path),
             format: detect_format(reference, &buf)?,
             bytes: buf,
         })
+    }
+
+    fn try_load_cached_remote(
+        &self,
+        reference: &str,
+        candidates: &[PathBuf],
+    ) -> Result<Option<SourceImage>, ImageError> {
+        for path in candidates {
+            if path.exists() {
+                let bytes = fs::read(path)?;
+                return Ok(Some(SourceImage {
+                    reference: reference.to_string(),
+                    cached_path: Some(path.clone()),
+                    format: detect_format(reference, &bytes)?,
+                    bytes,
+                }));
+            }
+        }
+        Ok(None)
+    }
+
+    fn remote_cache_candidates(&self, reference: &str) -> Vec<PathBuf> {
+        let trimmed = reference.split('?').next().unwrap_or(reference);
+        let raw_name = Path::new(trimmed)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or(trimmed);
+        let mut base = sanitize_filename(raw_name);
+        if base.is_empty() {
+            base = "image".to_string();
+        }
+
+        let mut names = Vec::new();
+        let mut canonical = base.clone();
+        if Path::new(&canonical).extension().is_none() {
+            if let Some(ext) = path_extension_from_str(trimmed) {
+                let ext = ext.trim();
+                if !ext.is_empty() {
+                    let ext_lower = ext.to_ascii_lowercase();
+                    if !canonical.ends_with('.') {
+                        canonical.push('.');
+                    }
+                    canonical.push_str(&ext_lower);
+                }
+            }
+        }
+
+        push_unique_name(&mut names, canonical.clone());
+        push_unique_name(&mut names, base);
+        if let Some(stem) = Path::new(&canonical)
+            .file_stem()
+            .and_then(|s| s.to_str())
+        {
+            push_unique_name(&mut names, stem.to_string());
+        }
+
+        names
+            .into_iter()
+            .map(|name| self.cache_dir.join(name))
+            .collect()
     }
 
     fn read_local(&self, reference: &str, asset_root: &Path) -> Result<SourceImage, ImageError> {
@@ -410,11 +490,11 @@ impl ImageProcessor {
         })
     }
 
-    fn target_resize_widths(&self, original_width: u32, display_width: u32) -> Vec<u32> {
-        let mut sizes = self.config.sizes.clone();
-        if !sizes.contains(&self.config.layout_width) {
-            sizes.push(self.config.layout_width);
-        }
+fn target_resize_widths(&self, original_width: u32, display_width: u32) -> Vec<u32> {
+    let mut sizes = self.config.sizes.clone();
+    if !sizes.contains(&self.config.layout_width) {
+        sizes.push(self.config.layout_width);
+    }
         if display_width > 0 && !sizes.contains(&display_width) {
             sizes.push(display_width);
         }
@@ -422,18 +502,18 @@ impl ImageProcessor {
         sizes.dedup();
 
         let mut widths = Vec::new();
-        for size in sizes {
-            let target_width = size.min(original_width);
-            if target_width == 0 || target_width == original_width {
-                continue;
-            }
+    for size in sizes {
+        let target_width = size.min(original_width);
+        if target_width == 0 || target_width == original_width {
+            continue;
+        }
             if widths.last().copied() == Some(target_width) {
                 continue;
-            }
-            widths.push(target_width);
         }
-        widths
+        widths.push(target_width);
     }
+    widths
+}
 
     fn ensure_original_cached(
         &self,
@@ -1055,6 +1135,15 @@ fn sanitize_filename(input: &str) -> String {
         })
         .collect();
     sanitized.trim_matches('_').to_string()
+}
+
+fn push_unique_name(names: &mut Vec<String>, candidate: String) {
+    if candidate.is_empty() {
+        return;
+    }
+    if !names.iter().any(|existing| existing == &candidate) {
+        names.push(candidate);
+    }
 }
 
 fn dimension_cache_path(original_path: &Path) -> PathBuf {
