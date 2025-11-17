@@ -2,15 +2,17 @@ use crate::config;
 use image::codecs::gif::GifDecoder;
 use image::codecs::jpeg::JpegEncoder;
 use image::imageops::FilterType;
-use image::{DynamicImage, GenericImageView, ImageDecoder, ImageFormat};
-use rayon::prelude::*;
+use image::{DynamicImage, ImageDecoder, ImageFormat};
 use rexif::{parse_buffer_quiet, ExifData, ExifTag, TagValue};
 use roxmltree::Document;
 use std::fs;
 use std::io::{self, Cursor, Read};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::Duration;
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc, Condvar, Mutex,
+};
+use std::time::{Duration, Instant};
 use thiserror::Error;
 
 #[derive(Debug, Clone)]
@@ -18,6 +20,10 @@ pub struct ImageProcessor {
     config: config::ImagesConfig,
     cache_dir: PathBuf,
     root_url: Option<String>,
+}
+
+lazy_static! {
+    static ref RESIZE_DISPATCHER: Arc<ResizeDispatcher> = Arc::new(ResizeDispatcher::new());
 }
 
 #[derive(Debug, Clone)]
@@ -47,7 +53,7 @@ pub struct ExifSummary {
 #[derive(Debug)]
 struct SourceImage {
     reference: String,
-    bytes: Vec<u8>,
+    bytes: Arc<[u8]>,
     format: SourceFormat,
     cached_path: Option<PathBuf>,
 }
@@ -96,7 +102,7 @@ impl ImageProcessor {
     }
 
     fn process_gif(&self, source: SourceImage) -> Result<ProcessedImage, ImageError> {
-        let decoder = GifDecoder::new(Cursor::new(&source.bytes))
+        let decoder = GifDecoder::new(Cursor::new(&*source.bytes))
             .map_err(|e| ImageError::Decode(e.to_string()))?;
         let (width, height) = decoder.dimensions();
         let width = width.max(1);
@@ -142,7 +148,7 @@ impl ImageProcessor {
         let original_url = self.public_url_for(&original_path);
 
         let layout_limit = self.config.layout_width;
-        let svg_dimensions = estimate_svg_dimensions(&source.bytes)
+        let svg_dimensions = estimate_svg_dimensions(source.bytes.as_ref())
             .unwrap_or((layout_limit as f64, layout_limit as f64));
         let (display_width, display_height, is_wide) =
             compute_display_dimensions(svg_dimensions.0, svg_dimensions.1, layout_limit);
@@ -173,47 +179,43 @@ impl ImageProcessor {
         if format == ImageFormat::Gif {
             return self.process_gif(source);
         }
-        let (exif_result, _warnings) = parse_buffer_quiet(&source.bytes);
-        let exif_data = exif_result.ok();
-
         let extension = extension_for_format(format).ok_or(ImageError::UnsupportedFormat)?;
         let original_path = self.ensure_original_cached(&source, extension)?;
-
-        if let Some(processed) = self.try_build_processed_from_cache(
+        if let Some(mut processed) = self.try_build_processed_from_cache(
             &source,
             &original_path,
             format,
             extension,
-            exif_data.as_ref(),
         ) {
+            if processed.exif.is_none() {
+                processed.exif = parse_buffer_quiet(source.bytes.as_ref())
+                    .0
+                    .ok()
+                    .map(|data| summarize_exif(&data));
+            }
             return Ok(processed);
         }
 
+        let exif_data = parse_buffer_quiet(source.bytes.as_ref()).0.ok();
         let original_url = self.public_url_for(&original_path);
         let mime_type = mime_type_for_format(format).to_string();
 
         let mut exif_bytes_raw = exif_data
             .as_ref()
             .and_then(|data| data.serialize().ok())
-            .map(|bytes| {
-                let mut prefixed = Vec::with_capacity(bytes.len() + 6);
-                prefixed.extend_from_slice(b"Exif\0\0");
-                prefixed.extend_from_slice(&bytes);
-                prefixed
-            });
+            .map(|bytes| ensure_exif_header(bytes));
         let original_orientation = exif_data.as_ref().and_then(exif_orientation);
 
-        let mut decoded = image::load_from_memory(&source.bytes)
-            .map_err(|e| ImageError::Decode(e.to_string()))?;
-        if let Some(orientation) = original_orientation {
-            decoded = apply_orientation(decoded, orientation);
-        }
         if let Some(bytes) = exif_bytes_raw.as_mut() {
             normalize_exif_orientation(bytes);
         }
         let exif_bytes = exif_bytes_raw.map(Arc::new);
 
-        let (width, height) = decoded.dimensions();
+        let (mut width, mut height) =
+            image::image_dimensions(&original_path).map_err(|e| ImageError::Decode(e.to_string()))?;
+        if matches!(original_orientation, Some(5 | 6 | 7 | 8)) {
+            std::mem::swap(&mut width, &mut height);
+        }
         let (display_width, display_height, is_wide) =
             compute_display_dimensions(width as f64, height as f64, self.config.layout_width);
         save_cached_dimensions(&original_path, width, height)?;
@@ -252,28 +254,18 @@ impl ImageProcessor {
             });
         }
 
-        let mut decoded_image = Some(decoded);
         if !resize_jobs.is_empty() {
             fs::create_dir_all(&self.cache_dir)?;
-            let jpeg_quality = self.config.jpeg_quality;
-            let shared_image = Arc::new(decoded_image.take().unwrap());
-            let exif_bytes_for_jobs = exif_bytes.clone();
-            resize_jobs
-                .into_par_iter()
-                .try_for_each(|job| {
-                    let resized =
-                        shared_image.resize(job.width, job.height, FilterType::Lanczos3);
-                    let encoded = encode_image(
-                        &resized,
-                        format,
-                        exif_bytes_for_jobs
-                            .as_ref()
-                            .map(|bytes| bytes.as_slice()),
-                        jpeg_quality,
-                    )?;
-                    fs::write(&job.path, &encoded)?;
-                    Ok::<(), ImageError>(())
-                })?;
+            let dispatch_exif = exif_bytes.clone();
+            schedule_resize_generation(
+                source.reference.clone(),
+                Arc::clone(&source.bytes),
+                format,
+                original_orientation,
+                resize_jobs,
+                dispatch_exif,
+                self.config.jpeg_quality,
+            );
         }
 
         let mut variants: Vec<ImageVariant> = variant_specs
@@ -324,6 +316,8 @@ impl ImageProcessor {
             return Ok(source);
         }
 
+        eprintln!("[images] fetching remote {}", reference);
+        let fetch_start = Instant::now();
         let agent = ureq::AgentBuilder::new()
             .timeout(Duration::from_secs(self.config.remote_fetch_timeout_secs))
             .build();
@@ -342,12 +336,17 @@ impl ImageProcessor {
         let mut buf = Vec::new();
         reader.read_to_end(&mut buf)?;
         fs::write(&primary_path, &buf)?;
+        eprintln!(
+            "[images] fetched remote {} in {:?}",
+            reference,
+            fetch_start.elapsed()
+        );
 
         Ok(SourceImage {
             reference: reference.to_string(),
             cached_path: Some(primary_path),
             format: detect_format(reference, &buf)?,
-            bytes: buf,
+            bytes: Arc::from(buf),
         })
     }
 
@@ -363,7 +362,7 @@ impl ImageProcessor {
                     reference: reference.to_string(),
                     cached_path: Some(path.clone()),
                     format: detect_format(reference, &bytes)?,
-                    bytes,
+                    bytes: Arc::from(bytes),
                 }));
             }
         }
@@ -427,7 +426,7 @@ impl ImageProcessor {
             reference: reference.to_string(),
             cached_path: Some(path.clone()),
             format: detect_format(reference, &bytes)?,
-            bytes,
+            bytes: Arc::from(bytes),
         })
     }
 
@@ -437,7 +436,6 @@ impl ImageProcessor {
         original_path: &Path,
         format: ImageFormat,
         extension: &str,
-        exif_data: Option<&ExifData>,
     ) -> Option<ProcessedImage> {
         let (width, height) = load_cached_dimensions(original_path)?;
         let original_stem = original_path
@@ -472,8 +470,6 @@ impl ImageProcessor {
         }
         variants.sort_by_key(|v| v.width);
 
-        let entries = exif_data.map(summarize_exif);
-
         Some(ProcessedImage {
             variants,
             original: Some(ImageVariant {
@@ -485,7 +481,7 @@ impl ImageProcessor {
             display_width,
             display_height,
             original_reference: source.reference.clone(),
-            exif: entries,
+            exif: None,
             is_wide,
         })
     }
@@ -532,7 +528,7 @@ fn target_resize_widths(&self, original_width: u32, display_width: u32) -> Vec<u
         let mut target = self.cache_dir.join(&base_name);
 
         if target.exists() {
-            if fs::read(&target)? == source.bytes {
+            if fs::read(&target)? == source.bytes.as_ref() {
                 return Ok(target);
             }
             let mut counter = 2usize;
@@ -540,7 +536,7 @@ fn target_resize_widths(&self, original_width: u32, display_width: u32) -> Vec<u
                 let candidate_name = numbered_filename(&base_name, counter);
                 let candidate_path = self.cache_dir.join(&candidate_name);
                 if candidate_path.exists() {
-                    if fs::read(&candidate_path)? == source.bytes {
+                    if fs::read(&candidate_path)? == source.bytes.as_ref() {
                         return Ok(candidate_path);
                     }
                 } else {
@@ -551,7 +547,7 @@ fn target_resize_widths(&self, original_width: u32, display_width: u32) -> Vec<u
             }
         }
 
-        fs::write(&target, &source.bytes)?;
+        fs::write(&target, &*source.bytes)?;
         Ok(target)
     }
 
@@ -706,6 +702,84 @@ fn encode_image(
         }
     }
     Ok(buf)
+}
+
+fn generate_variant_file(
+    job: &VariantJob,
+    source_image: &DynamicImage,
+    format: ImageFormat,
+    exif_bytes: Option<&[u8]>,
+    jpeg_quality: u8,
+) -> Result<(), ImageError> {
+    let resized = source_image.resize(job.width, job.height, FilterType::Lanczos3);
+    let encoded = encode_image(&resized, format, exif_bytes, jpeg_quality)?;
+    if let Some(parent) = job.path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(&job.path, &encoded)?;
+    Ok(())
+}
+
+fn schedule_resize_generation(
+    reference: String,
+    bytes: Arc<[u8]>,
+    format: ImageFormat,
+    orientation: Option<u16>,
+    jobs: Vec<VariantJob>,
+    exif_bytes: Option<Arc<Vec<u8>>>,
+    jpeg_quality: u8,
+) {
+    if jobs.is_empty() {
+        return;
+    }
+
+    let dispatcher = Arc::clone(&RESIZE_DISPATCHER);
+    dispatcher.spawn(move || {
+        eprintln!("[images] loading full-size {}", reference);
+        let start = Instant::now();
+        let mut image = match image::load_from_memory(bytes.as_ref()) {
+            Ok(img) => img,
+            Err(err) => {
+                eprintln!("Failed to load {}: {}", reference, err);
+                return;
+            }
+        };
+        if let Some(orientation) = orientation {
+            image = apply_orientation(image, orientation);
+        }
+        eprintln!(
+            "[images] loaded full-size {} in {:?}",
+            reference,
+            start.elapsed()
+        );
+        let exif_slice = exif_bytes
+            .as_deref()
+            .map(|buf| buf.as_slice());
+        for job in jobs {
+            if let Err(err) =
+                generate_variant_file(&job, &image, format, exif_slice, jpeg_quality)
+            {
+                eprintln!(
+                    "Failed to build variant {} for {}: {}",
+                    job.path.display(),
+                    reference,
+                    err
+                );
+            }
+        }
+    });
+}
+
+fn ensure_exif_header(bytes: Vec<u8>) -> Vec<u8> {
+    const EXIF_HEADER: &[u8; 6] = b"Exif\0\0";
+    if bytes.starts_with(EXIF_HEADER) {
+        bytes
+    } else {
+        let mut prefixed = Vec::with_capacity(bytes.len() + EXIF_HEADER.len());
+        prefixed.extend_from_slice(EXIF_HEADER);
+        prefixed.extend_from_slice(&bytes);
+        prefixed
+    }
 }
 
 fn insert_exif_segment(jpeg: &mut Vec<u8>, exif_data: &[u8]) {
@@ -1162,6 +1236,48 @@ fn load_cached_dimensions(original_path: &Path) -> Option<(u32, u32)> {
 fn save_cached_dimensions(original_path: &Path, width: u32, height: u32) -> Result<(), io::Error> {
     let cache_path = dimension_cache_path(original_path);
     fs::write(cache_path, format!("{} {}\n", width, height))
+}
+
+struct ResizeDispatcher {
+    pending: AtomicUsize,
+    lock: Mutex<()>,
+    condvar: Condvar,
+}
+
+impl ResizeDispatcher {
+    fn new() -> Self {
+        Self {
+            pending: AtomicUsize::new(0),
+            lock: Mutex::new(()),
+            condvar: Condvar::new(),
+        }
+    }
+
+    fn spawn(self: Arc<Self>, job: impl FnOnce() + Send + 'static) {
+        self.pending.fetch_add(1, Ordering::SeqCst);
+        rayon::spawn_fifo(move || {
+            job();
+            self.job_finished();
+        });
+    }
+
+    fn job_finished(&self) {
+        if self.pending.fetch_sub(1, Ordering::SeqCst) == 1 {
+            let _guard = self.lock.lock().unwrap();
+            self.condvar.notify_all();
+        }
+    }
+
+    fn wait(&self) {
+        let mut guard = self.lock.lock().unwrap();
+        while self.pending.load(Ordering::SeqCst) > 0 {
+            guard = self.condvar.wait(guard).unwrap();
+        }
+    }
+}
+
+pub fn wait_for_pending_resizes() {
+    RESIZE_DISPATCHER.wait();
 }
 
 #[cfg(test)]

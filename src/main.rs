@@ -175,6 +175,8 @@ fn main() {
         eprintln!("{}", e);
         std::process::exit(1);
     }
+
+    image_processor::wait_for_pending_resizes();
 }
 
 fn process_file(
