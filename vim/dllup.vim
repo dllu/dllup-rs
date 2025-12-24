@@ -51,7 +51,7 @@ syn region dllupCodeBlock start="^\~\~\~$" end="^\~\~\~$" contains=dllupCodeInfo
 
 syn region dllupBlockquote start="^> " end="\n\n" contains=@dllupInline contained
 syn region dllupDisplayMath start="^\$ " end="\n\n" contained
-syn region dllupPic start="^pic " end="\n\n" contains=dllupPicKeyword,dllupPicUrl,dllupPicAlt,dllupPicColon,dllupPicCaption contained
+syn region dllupPic start="^pic " end="$" oneline contains=dllupPicKeyword,dllupPicUrl,dllupPicAlt,dllupPicColon,dllupPicCaption contained
 syn match dllupPicKeyword "^pic" contained
 syn match dllupPicUrl "\%(^pic\s\+\)\@<=\S\+" contained
 syn match dllupPicAlt "\%(^pic\s\+\S\+\s\+\)\@<=.\{-}\ze\s:\s" contained

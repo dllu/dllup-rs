@@ -2,6 +2,7 @@ use crate::config;
 use image::codecs::gif::GifDecoder;
 use image::codecs::jpeg::JpegEncoder;
 use image::imageops::FilterType;
+use image::io::Reader as ImageReader;
 use image::{DynamicImage, ImageDecoder, ImageFormat};
 use rexif::{parse_buffer_quiet, ExifData, ExifTag, TagValue};
 use roxmltree::Document;
@@ -748,7 +749,7 @@ fn schedule_resize_generation(
     dispatcher.spawn(move || {
         eprintln!("[images] loading full-size {}", reference);
         let start = Instant::now();
-        let mut image = match image::load_from_memory(bytes.as_ref()) {
+        let mut image = match decode_full_image(bytes.as_ref(), format) {
             Ok(img) => img,
             Err(err) => {
                 eprintln!("Failed to load {}: {}", reference, err);
@@ -779,6 +780,14 @@ fn schedule_resize_generation(
             }
         }
     });
+}
+
+fn decode_full_image(bytes: &[u8], format: ImageFormat) -> Result<DynamicImage, ImageError> {
+    let mut reader = ImageReader::with_format(Cursor::new(bytes), format);
+    reader.no_limits();
+    reader
+        .decode()
+        .map_err(|e| ImageError::Decode(e.to_string()))
 }
 
 fn ensure_exif_header(bytes: Vec<u8>) -> Vec<u8> {
