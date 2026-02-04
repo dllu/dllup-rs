@@ -73,6 +73,12 @@ struct VariantJob {
     path: PathBuf,
 }
 
+struct DimensionCacheWrite {
+    original_path: PathBuf,
+    width: u32,
+    height: u32,
+}
+
 #[derive(Debug, Clone)]
 enum SourceFormat {
     Svg,
@@ -137,6 +143,11 @@ impl ImageProcessor {
         reference: &str,
         asset_root: &Path,
     ) -> Result<ProcessedImage, ImageError> {
+        if is_remote(reference) {
+            if let Some(processed) = self.try_build_processed_from_remote_sidecar(reference)? {
+                return Ok(processed);
+            }
+        }
         let source = self.load_source(reference, asset_root)?;
         match source.format {
             SourceFormat::Svg => self.process_svg(source),
@@ -230,7 +241,6 @@ impl ImageProcessor {
         }
         let (display_width, display_height, is_wide) =
             compute_display_dimensions(width as f64, height as f64, self.config.layout_width);
-        save_cached_dimensions(&original_path, width, height)?;
 
         let original_stem = original_path
             .file_stem()
@@ -266,6 +276,7 @@ impl ImageProcessor {
             });
         }
 
+        let should_write_sidecar_now = resize_jobs.is_empty();
         if !resize_jobs.is_empty() {
             fs::create_dir_all(&self.cache_dir)?;
             let dispatch_exif = exif_bytes.clone();
@@ -275,6 +286,11 @@ impl ImageProcessor {
                 format,
                 original_orientation,
                 resize_jobs,
+                Some(DimensionCacheWrite {
+                    original_path: original_path.clone(),
+                    width,
+                    height,
+                }),
                 dispatch_exif,
                 self.config.jpeg_quality,
             );
@@ -298,6 +314,10 @@ impl ImageProcessor {
             mime_type: mime_type.clone(),
         };
 
+        if should_write_sidecar_now {
+            save_cached_dimensions(&original_path, width, height)?;
+        }
+
         Ok(ProcessedImage {
             variants,
             original: Some(original_variant),
@@ -307,6 +327,156 @@ impl ImageProcessor {
             exif: entries,
             is_wide,
         })
+    }
+
+    fn try_build_processed_from_remote_sidecar(
+        &self,
+        reference: &str,
+    ) -> Result<Option<ProcessedImage>, ImageError> {
+        if self
+            .config
+            .img_root_url
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .is_none()
+        {
+            return Ok(None);
+        }
+
+        let ext = match path_extension_from_str(reference) {
+            Some(ext) => ext,
+            None => return Ok(None),
+        };
+        let format = match image_format_from_extension(ext) {
+            Some(format) => format,
+            None => return Ok(None),
+        };
+        let extension = match extension_for_format(format) {
+            Some(extension) => extension,
+            None => return Ok(None),
+        };
+
+        let candidates = self.remote_cache_candidates(reference);
+        let original_path = candidates
+            .first()
+            .cloned()
+            .unwrap_or_else(|| self.cache_dir.join("image"));
+
+        if let Some((width, height)) = load_cached_dimensions(&original_path) {
+            return Ok(Some(self.build_processed_from_dimensions(
+                reference,
+                &original_path,
+                format,
+                extension,
+                width,
+                height,
+            )));
+        }
+
+        let sidecar_path = dimension_cache_path(&original_path);
+        let sidecar_url = self.public_url_for(&sidecar_path);
+
+        if let Some((width, height)) = self.fetch_remote_dimensions(&sidecar_url)? {
+            fs::create_dir_all(&self.cache_dir)?;
+            let _ = save_cached_dimensions(&original_path, width, height);
+            return Ok(Some(self.build_processed_from_dimensions(
+                reference,
+                &original_path,
+                format,
+                extension,
+                width,
+                height,
+            )));
+        }
+
+        Ok(None)
+    }
+
+    fn fetch_remote_dimensions(
+        &self,
+        sidecar_url: &str,
+    ) -> Result<Option<(u32, u32)>, ImageError> {
+        let agent = ureq::AgentBuilder::new()
+            .timeout(Duration::from_secs(self.config.remote_fetch_timeout_secs))
+            .build();
+        let response = match agent.get(sidecar_url).call() {
+            Ok(response) => response,
+            Err(ureq::Error::Status(_, _)) => {
+                return Ok(None);
+            }
+            Err(err) => {
+                eprintln!("[images] sidecar fetch failed {}: {}", sidecar_url, err);
+                return Ok(None);
+            }
+        };
+
+        if response.status() >= 400 {
+            return Ok(None);
+        }
+        let mut reader = response.into_reader();
+        let mut buf = String::new();
+        reader.read_to_string(&mut buf)?;
+        Ok(parse_cached_dimensions(&buf))
+    }
+
+    fn build_processed_from_dimensions(
+        &self,
+        reference: &str,
+        original_path: &Path,
+        format: ImageFormat,
+        extension: &str,
+        width: u32,
+        height: u32,
+    ) -> ProcessedImage {
+        let mime_type = mime_type_for_format(format).to_string();
+        let (display_width, display_height, is_wide) =
+            compute_display_dimensions(width as f64, height as f64, self.config.layout_width);
+
+        let original_stem = original_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "image".to_string());
+
+        let target_widths = self.target_resize_widths(width, display_width);
+        let mut variants: Vec<ImageVariant> = target_widths
+            .into_iter()
+            .map(|target_width| {
+                let filename = if extension.is_empty() {
+                    format!("{}-{}", original_stem, target_width)
+                } else {
+                    format!("{}-{}.{}", original_stem, target_width, extension)
+                };
+                let target_path = self.cache_dir.join(filename);
+                let target_height = ((target_width as f64 / width as f64) * height as f64)
+                    .round()
+                    .max(1.0) as u32;
+                ImageVariant {
+                    width: target_width,
+                    height: target_height,
+                    url: self.public_url_for(&target_path),
+                    mime_type: mime_type.clone(),
+                }
+            })
+            .collect();
+        variants.sort_by_key(|v| v.width);
+
+        ProcessedImage {
+            variants,
+            original: Some(ImageVariant {
+                width,
+                height,
+                url: self.public_url_for(original_path),
+                mime_type,
+            }),
+            display_width,
+            display_height,
+            original_reference: reference.to_string(),
+            exif: None,
+            is_wide,
+        }
     }
 
     fn load_source(&self, reference: &str, asset_root: &Path) -> Result<SourceImage, ImageError> {
@@ -738,6 +908,7 @@ fn schedule_resize_generation(
     format: ImageFormat,
     orientation: Option<u16>,
     jobs: Vec<VariantJob>,
+    dimension_cache: Option<DimensionCacheWrite>,
     exif_bytes: Option<Arc<Vec<u8>>>,
     jpeg_quality: u8,
 ) {
@@ -767,6 +938,7 @@ fn schedule_resize_generation(
         let exif_slice = exif_bytes
             .as_deref()
             .map(|buf| buf.as_slice());
+        let mut all_ok = true;
         for job in jobs {
             if let Err(err) =
                 generate_variant_file(&job, &image, format, exif_slice, jpeg_quality)
@@ -777,6 +949,20 @@ fn schedule_resize_generation(
                     reference,
                     err
                 );
+                all_ok = false;
+            }
+        }
+        if all_ok {
+            if let Some(cache) = dimension_cache {
+                if let Err(err) =
+                    save_cached_dimensions(&cache.original_path, cache.width, cache.height)
+                {
+                    eprintln!(
+                        "Failed to write image dimensions {}: {}",
+                        cache.original_path.display(),
+                        err
+                    );
+                }
             }
         }
     });
@@ -1244,13 +1430,17 @@ fn dimension_cache_path(original_path: &Path) -> PathBuf {
     original_path.with_extension("txt")
 }
 
-fn load_cached_dimensions(original_path: &Path) -> Option<(u32, u32)> {
-    let cache_path = dimension_cache_path(original_path);
-    let contents = fs::read_to_string(cache_path).ok()?;
+fn parse_cached_dimensions(contents: &str) -> Option<(u32, u32)> {
     let mut parts = contents.split_whitespace();
     let width = parts.next()?.parse().ok()?;
     let height = parts.next()?.parse().ok()?;
     Some((width, height))
+}
+
+fn load_cached_dimensions(original_path: &Path) -> Option<(u32, u32)> {
+    let cache_path = dimension_cache_path(original_path);
+    let contents = fs::read_to_string(cache_path).ok()?;
+    parse_cached_dimensions(&contents)
 }
 
 fn save_cached_dimensions(original_path: &Path, width: u32, height: u32) -> Result<(), io::Error> {
