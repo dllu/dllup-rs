@@ -204,12 +204,9 @@ impl ImageProcessor {
         }
         let extension = extension_for_format(format).ok_or(ImageError::UnsupportedFormat)?;
         let original_path = self.ensure_original_cached(&source, extension)?;
-        if let Some(mut processed) = self.try_build_processed_from_cache(
-            &source,
-            &original_path,
-            format,
-            extension,
-        ) {
+        if let Some(mut processed) =
+            self.try_build_processed_from_cache(&source, &original_path, format, extension)
+        {
             if processed.exif.is_none() {
                 processed.exif = parse_buffer_quiet(source.bytes.as_ref())
                     .0
@@ -234,8 +231,8 @@ impl ImageProcessor {
         }
         let exif_bytes = exif_bytes_raw.map(Arc::new);
 
-        let (mut width, mut height) =
-            image::image_dimensions(&original_path).map_err(|e| ImageError::Decode(e.to_string()))?;
+        let (mut width, mut height) = image::image_dimensions(&original_path)
+            .map_err(|e| ImageError::Decode(e.to_string()))?;
         if matches!(original_orientation, Some(5..=8)) {
             std::mem::swap(&mut width, &mut height);
         }
@@ -393,10 +390,7 @@ impl ImageProcessor {
         Ok(None)
     }
 
-    fn fetch_remote_dimensions(
-        &self,
-        sidecar_url: &str,
-    ) -> Result<Option<(u32, u32)>, ImageError> {
+    fn fetch_remote_dimensions(&self, sidecar_url: &str) -> Result<Option<(u32, u32)>, ImageError> {
         let agent = ureq::AgentBuilder::new()
             .timeout(Duration::from_secs(self.config.remote_fetch_timeout_secs))
             .build();
@@ -579,10 +573,7 @@ impl ImageProcessor {
 
         push_unique_name(&mut names, canonical.clone());
         push_unique_name(&mut names, base);
-        if let Some(stem) = Path::new(&canonical)
-            .file_stem()
-            .and_then(|s| s.to_str())
-        {
+        if let Some(stem) = Path::new(&canonical).file_stem().and_then(|s| s.to_str()) {
             push_unique_name(&mut names, stem.to_string());
         }
 
@@ -668,11 +659,11 @@ impl ImageProcessor {
         })
     }
 
-fn target_resize_widths(&self, original_width: u32, display_width: u32) -> Vec<u32> {
-    let mut sizes = self.config.sizes.clone();
-    if !sizes.contains(&self.config.layout_width) {
-        sizes.push(self.config.layout_width);
-    }
+    fn target_resize_widths(&self, original_width: u32, display_width: u32) -> Vec<u32> {
+        let mut sizes = self.config.sizes.clone();
+        if !sizes.contains(&self.config.layout_width) {
+            sizes.push(self.config.layout_width);
+        }
         if display_width > 0 && !sizes.contains(&display_width) {
             sizes.push(display_width);
         }
@@ -680,18 +671,18 @@ fn target_resize_widths(&self, original_width: u32, display_width: u32) -> Vec<u
         sizes.dedup();
 
         let mut widths = Vec::new();
-    for size in sizes {
-        let target_width = size.min(original_width);
-        if target_width == 0 || target_width == original_width {
-            continue;
-        }
+        for size in sizes {
+            let target_width = size.min(original_width);
+            if target_width == 0 || target_width == original_width {
+                continue;
+            }
             if widths.last().copied() == Some(target_width) {
                 continue;
+            }
+            widths.push(target_width);
         }
-        widths.push(target_width);
+        widths
     }
-    widths
-}
 
     fn ensure_original_cached(
         &self,
@@ -935,13 +926,10 @@ fn schedule_resize_generation(
             reference,
             start.elapsed()
         );
-        let exif_slice = exif_bytes
-            .as_deref()
-            .map(|buf| buf.as_slice());
+        let exif_slice = exif_bytes.as_deref().map(|buf| buf.as_slice());
         let mut all_ok = true;
         for job in jobs {
-            if let Err(err) =
-                generate_variant_file(&job, &image, format, exif_slice, jpeg_quality)
+            if let Err(err) = generate_variant_file(&job, &image, format, exif_slice, jpeg_quality)
             {
                 eprintln!(
                     "Failed to build variant {} for {}: {}",
