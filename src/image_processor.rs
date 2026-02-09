@@ -51,6 +51,20 @@ pub struct ExifSummary {
     pub entries: Vec<(String, String)>,
 }
 
+#[derive(Debug, Clone)]
+enum ExifCache {
+    Unknown,
+    None,
+    Summary(ExifSummary),
+}
+
+#[derive(Debug, Clone)]
+struct CachedImageInfo {
+    width: u32,
+    height: u32,
+    exif: ExifCache,
+}
+
 #[derive(Debug)]
 struct SourceImage {
     reference: String,
@@ -77,6 +91,14 @@ struct DimensionCacheWrite {
     original_path: PathBuf,
     width: u32,
     height: u32,
+    exif: ExifCache,
+}
+
+struct CachedBuild {
+    processed: ProcessedImage,
+    width: u32,
+    height: u32,
+    exif_cache: ExifCache,
 }
 
 #[derive(Debug, Clone)]
@@ -204,19 +226,24 @@ impl ImageProcessor {
         }
         let extension = extension_for_format(format).ok_or(ImageError::UnsupportedFormat)?;
         let original_path = self.ensure_original_cached(&source, extension)?;
-        if let Some(mut processed) =
+        if let Some(mut cached) =
             self.try_build_processed_from_cache(&source, &original_path, format, extension)
         {
-            if processed.exif.is_none() {
-                processed.exif = parse_buffer_quiet(source.bytes.as_ref())
-                    .0
-                    .ok()
-                    .map(|data| summarize_exif(&data));
+            if matches!(cached.exif_cache, ExifCache::Unknown | ExifCache::None) {
+                cached.exif_cache = exif_cache_from_bytes(source.bytes.as_ref());
+                cached.processed.exif = exif_summary_from_cache(&cached.exif_cache);
+                let _ = save_cached_info(
+                    &original_path,
+                    cached.width,
+                    cached.height,
+                    &cached.exif_cache,
+                );
             }
-            return Ok(processed);
+            return Ok(cached.processed);
         }
 
         let exif_data = parse_buffer_quiet(source.bytes.as_ref()).0.ok();
+        let exif_cache = exif_cache_from_data(exif_data.as_ref());
         let original_url = self.public_url_for(&original_path);
         let mime_type = mime_type_for_format(format).to_string();
 
@@ -287,6 +314,7 @@ impl ImageProcessor {
                     original_path: original_path.clone(),
                     width,
                     height,
+                    exif: exif_cache.clone(),
                 }),
                 dispatch_exif,
                 self.config.jpeg_quality,
@@ -303,7 +331,7 @@ impl ImageProcessor {
             })
             .collect();
         variants.sort_by_key(|v| v.width);
-        let entries = exif_data.as_ref().map(summarize_exif);
+        let entries = exif_summary_from_cache(&exif_cache);
         let original_variant = ImageVariant {
             width,
             height,
@@ -312,7 +340,7 @@ impl ImageProcessor {
         };
 
         if should_write_sidecar_now {
-            save_cached_dimensions(&original_path, width, height)?;
+            save_cached_info(&original_path, width, height, &exif_cache)?;
         }
 
         Ok(ProcessedImage {
@@ -360,37 +388,61 @@ impl ImageProcessor {
             .cloned()
             .unwrap_or_else(|| self.cache_dir.join("image"));
 
-        if let Some((width, height)) = load_cached_dimensions(&original_path) {
-            return Ok(Some(self.build_processed_from_dimensions(
-                reference,
-                &original_path,
-                format,
-                extension,
-                width,
-                height,
-            )));
-        }
-
         let sidecar_path = dimension_cache_path(&original_path);
         let sidecar_url = self.public_url_for(&sidecar_path);
 
-        if let Some((width, height)) = self.fetch_remote_dimensions(&sidecar_url)? {
-            fs::create_dir_all(&self.cache_dir)?;
-            let _ = save_cached_dimensions(&original_path, width, height);
+        if let Some(mut info) = load_cached_info(&original_path) {
+            if matches!(info.exif, ExifCache::Unknown) {
+                info.exif = self.resolve_exif_from_thumbnails(
+                    &original_path,
+                    format,
+                    extension,
+                    info.width,
+                    info.height,
+                )?;
+                let _ = save_cached_info(&original_path, info.width, info.height, &info.exif);
+            }
             return Ok(Some(self.build_processed_from_dimensions(
                 reference,
                 &original_path,
                 format,
                 extension,
-                width,
-                height,
+                info.width,
+                info.height,
+                &info.exif,
+            )));
+        }
+
+        if let Some(mut info) = self.fetch_remote_cached_info(&sidecar_url)? {
+            if matches!(info.exif, ExifCache::Unknown) {
+                info.exif = self.resolve_exif_from_thumbnails(
+                    &original_path,
+                    format,
+                    extension,
+                    info.width,
+                    info.height,
+                )?;
+            }
+            fs::create_dir_all(&self.cache_dir)?;
+            let _ = save_cached_info(&original_path, info.width, info.height, &info.exif);
+            return Ok(Some(self.build_processed_from_dimensions(
+                reference,
+                &original_path,
+                format,
+                extension,
+                info.width,
+                info.height,
+                &info.exif,
             )));
         }
 
         Ok(None)
     }
 
-    fn fetch_remote_dimensions(&self, sidecar_url: &str) -> Result<Option<(u32, u32)>, ImageError> {
+    fn fetch_remote_cached_info(
+        &self,
+        sidecar_url: &str,
+    ) -> Result<Option<CachedImageInfo>, ImageError> {
         let agent = ureq::AgentBuilder::new()
             .timeout(Duration::from_secs(self.config.remote_fetch_timeout_secs))
             .build();
@@ -411,7 +463,91 @@ impl ImageProcessor {
         let mut reader = response.into_reader();
         let mut buf = String::new();
         reader.read_to_string(&mut buf)?;
-        Ok(parse_cached_dimensions(&buf))
+        Ok(parse_cached_info(&buf))
+    }
+
+    fn fetch_remote_bytes(&self, url: &str) -> Result<Option<Vec<u8>>, ImageError> {
+        let agent = ureq::AgentBuilder::new()
+            .timeout(Duration::from_secs(self.config.remote_fetch_timeout_secs))
+            .build();
+        let response = match agent.get(url).call() {
+            Ok(response) => response,
+            Err(ureq::Error::Status(_, _)) => {
+                return Ok(None);
+            }
+            Err(err) => {
+                eprintln!("[images] fetch failed {}: {}", url, err);
+                return Ok(None);
+            }
+        };
+        if response.status() >= 400 {
+            return Ok(None);
+        }
+        let mut reader = response.into_reader();
+        let mut buf = Vec::new();
+        reader.read_to_end(&mut buf)?;
+        Ok(Some(buf))
+    }
+
+    fn resolve_exif_from_thumbnails(
+        &self,
+        original_path: &Path,
+        format: ImageFormat,
+        extension: &str,
+        width: u32,
+        height: u32,
+    ) -> Result<ExifCache, ImageError> {
+        let (display_width, _display_height, _is_wide) =
+            compute_display_dimensions(width as f64, height as f64, self.config.layout_width);
+        let target_widths = self.target_resize_widths(width, display_width);
+        let original_stem = original_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "image".to_string());
+
+        if format == ImageFormat::Gif || format == ImageFormat::Bmp || format == ImageFormat::Tiff {
+            // These formats don't typically carry EXIF; keep sidecar explicit.
+            return Ok(ExifCache::None);
+        }
+
+        for target_width in &target_widths {
+            let filename = if extension.is_empty() {
+                format!("{}-{}", original_stem, target_width)
+            } else {
+                format!("{}-{}.{}", original_stem, target_width, extension)
+            };
+            let variant_path = self.cache_dir.join(&filename);
+            if variant_path.exists() {
+                let bytes = fs::read(&variant_path)?;
+                return Ok(exif_cache_from_bytes(&bytes));
+            }
+        }
+
+        if original_path.exists() {
+            let bytes = fs::read(original_path)?;
+            return Ok(exif_cache_from_bytes(&bytes));
+        }
+
+        for target_width in &target_widths {
+            let filename = if extension.is_empty() {
+                format!("{}-{}", original_stem, target_width)
+            } else {
+                format!("{}-{}.{}", original_stem, target_width, extension)
+            };
+            let variant_path = self.cache_dir.join(&filename);
+            let url = self.public_url_for(&variant_path);
+            if let Some(bytes) = self.fetch_remote_bytes(&url)? {
+                if let Some(parent) = variant_path.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                let _ = fs::write(&variant_path, &bytes);
+                return Ok(exif_cache_from_bytes(&bytes));
+            }
+        }
+
+        Ok(ExifCache::Unknown)
     }
 
     fn build_processed_from_dimensions(
@@ -422,6 +558,7 @@ impl ImageProcessor {
         extension: &str,
         width: u32,
         height: u32,
+        exif: &ExifCache,
     ) -> ProcessedImage {
         let mime_type = mime_type_for_format(format).to_string();
         let (display_width, display_height, is_wide) =
@@ -468,7 +605,7 @@ impl ImageProcessor {
             display_width,
             display_height,
             original_reference: reference.to_string(),
-            exif: None,
+            exif: exif_summary_from_cache(exif),
             is_wide,
         }
     }
@@ -609,8 +746,10 @@ impl ImageProcessor {
         original_path: &Path,
         format: ImageFormat,
         extension: &str,
-    ) -> Option<ProcessedImage> {
-        let (width, height) = load_cached_dimensions(original_path)?;
+    ) -> Option<CachedBuild> {
+        let info = load_cached_info(original_path)?;
+        let width = info.width;
+        let height = info.height;
         let original_stem = original_path
             .file_stem()
             .and_then(|s| s.to_str())
@@ -643,7 +782,7 @@ impl ImageProcessor {
         }
         variants.sort_by_key(|v| v.width);
 
-        Some(ProcessedImage {
+        let processed = ProcessedImage {
             variants,
             original: Some(ImageVariant {
                 width,
@@ -654,8 +793,15 @@ impl ImageProcessor {
             display_width,
             display_height,
             original_reference: source.reference.clone(),
-            exif: None,
+            exif: exif_summary_from_cache(&info.exif),
             is_wide,
+        };
+
+        Some(CachedBuild {
+            processed,
+            width,
+            height,
+            exif_cache: info.exif,
         })
     }
 
@@ -943,7 +1089,7 @@ fn schedule_resize_generation(
         if all_ok {
             if let Some(cache) = dimension_cache {
                 if let Err(err) =
-                    save_cached_dimensions(&cache.original_path, cache.width, cache.height)
+                    save_cached_info(&cache.original_path, cache.width, cache.height, &cache.exif)
                 {
                     eprintln!(
                         "Failed to write image dimensions {}: {}",
@@ -1141,6 +1287,31 @@ fn summarize_exif(exif: &ExifData) -> ExifSummary {
     }
 
     ExifSummary { entries }
+}
+
+fn exif_cache_from_data(exif: Option<&ExifData>) -> ExifCache {
+    if let Some(exif) = exif {
+        let summary = summarize_exif(exif);
+        if summary.entries.is_empty() {
+            ExifCache::None
+        } else {
+            ExifCache::Summary(summary)
+        }
+    } else {
+        ExifCache::None
+    }
+}
+
+fn exif_cache_from_bytes(bytes: &[u8]) -> ExifCache {
+    let exif = parse_buffer_quiet(bytes).0.ok();
+    exif_cache_from_data(exif.as_ref())
+}
+
+fn exif_summary_from_cache(cache: &ExifCache) -> Option<ExifSummary> {
+    match cache {
+        ExifCache::Summary(summary) if !summary.entries.is_empty() => Some(summary.clone()),
+        _ => None,
+    }
 }
 
 fn exif_orientation(exif: &ExifData) -> Option<u16> {
@@ -1418,22 +1589,92 @@ fn dimension_cache_path(original_path: &Path) -> PathBuf {
     original_path.with_extension("txt")
 }
 
-fn parse_cached_dimensions(contents: &str) -> Option<(u32, u32)> {
-    let mut parts = contents.split_whitespace();
+fn parse_cached_info(contents: &str) -> Option<CachedImageInfo> {
+    let mut lines = contents.lines();
+    let first = lines.next()?.trim();
+    let mut parts = first.split_whitespace();
     let width = parts.next()?.parse().ok()?;
     let height = parts.next()?.parse().ok()?;
-    Some((width, height))
+
+    let mut exif_state = ExifCache::Unknown;
+    let mut entries: Vec<(String, String)> = Vec::new();
+    for line in lines {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let lower = trimmed.to_ascii_lowercase();
+        if lower.starts_with("exif:") {
+            let value = trimmed[5..].trim();
+            let value_lower = value.to_ascii_lowercase();
+            if value_lower == "none" || value_lower == "missing" || value_lower == "no" {
+                exif_state = ExifCache::None;
+            } else if value_lower == "present" {
+                exif_state = ExifCache::Summary(ExifSummary {
+                    entries: Vec::new(),
+                });
+            } else if value_lower == "unknown" {
+                exif_state = ExifCache::Unknown;
+            }
+            continue;
+        }
+        if let Some((label, value)) = trimmed.split_once(':') {
+            let label = label.trim().to_string();
+            let value = value.trim().to_string();
+            if !label.is_empty() && !value.is_empty() {
+                entries.push((label, value));
+            }
+        }
+    }
+
+    let exif = if !entries.is_empty() {
+        match exif_state {
+            ExifCache::None => ExifCache::None,
+            _ => ExifCache::Summary(ExifSummary { entries }),
+        }
+    } else {
+        exif_state
+    };
+
+    Some(CachedImageInfo {
+        width,
+        height,
+        exif,
+    })
 }
 
-fn load_cached_dimensions(original_path: &Path) -> Option<(u32, u32)> {
+fn load_cached_info(original_path: &Path) -> Option<CachedImageInfo> {
     let cache_path = dimension_cache_path(original_path);
     let contents = fs::read_to_string(cache_path).ok()?;
-    parse_cached_dimensions(&contents)
+    parse_cached_info(&contents)
 }
 
-fn save_cached_dimensions(original_path: &Path, width: u32, height: u32) -> Result<(), io::Error> {
+fn save_cached_info(
+    original_path: &Path,
+    width: u32,
+    height: u32,
+    exif: &ExifCache,
+) -> Result<(), io::Error> {
     let cache_path = dimension_cache_path(original_path);
-    fs::write(cache_path, format!("{} {}\n", width, height))
+    let mut contents = format!("{} {}\n", width, height);
+    match exif {
+        ExifCache::None => {
+            contents.push_str("exif: none\n");
+        }
+        ExifCache::Unknown => {
+            contents.push_str("exif: unknown\n");
+        }
+        ExifCache::Summary(summary) => {
+            contents.push_str("exif: present\n");
+            for (label, value) in &summary.entries {
+                contents.push_str(label);
+                contents.push_str(": ");
+                contents.push_str(value);
+                contents.push('\n');
+            }
+        }
+    }
+    fs::write(cache_path, contents)
 }
 
 struct ResizeDispatcher {
