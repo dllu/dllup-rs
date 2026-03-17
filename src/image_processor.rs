@@ -65,6 +65,14 @@ struct CachedImageInfo {
     exif: ExifCache,
 }
 
+struct ProcessedImageInput<'a> {
+    reference: &'a str,
+    original_path: &'a Path,
+    format: ImageFormat,
+    extension: &'a str,
+    info: &'a CachedImageInfo,
+}
+
 #[derive(Debug)]
 struct SourceImage {
     reference: String,
@@ -92,6 +100,17 @@ struct DimensionCacheWrite {
     width: u32,
     height: u32,
     exif: ExifCache,
+}
+
+struct ResizeGenerationRequest {
+    reference: String,
+    bytes: Arc<[u8]>,
+    format: ImageFormat,
+    orientation: Option<u16>,
+    jobs: Vec<VariantJob>,
+    dimension_cache: Option<DimensionCacheWrite>,
+    exif_bytes: Option<Arc<Vec<u8>>>,
+    jpeg_quality: u8,
 }
 
 struct CachedBuild {
@@ -304,21 +323,21 @@ impl ImageProcessor {
         if !resize_jobs.is_empty() {
             fs::create_dir_all(&self.cache_dir)?;
             let dispatch_exif = exif_bytes.clone();
-            schedule_resize_generation(
-                source.reference.clone(),
-                Arc::clone(&source.bytes),
+            schedule_resize_generation(ResizeGenerationRequest {
+                reference: source.reference.clone(),
+                bytes: Arc::clone(&source.bytes),
                 format,
-                original_orientation,
-                resize_jobs,
-                Some(DimensionCacheWrite {
+                orientation: original_orientation,
+                jobs: resize_jobs,
+                dimension_cache: Some(DimensionCacheWrite {
                     original_path: original_path.clone(),
                     width,
                     height,
                     exif: exif_cache.clone(),
                 }),
-                dispatch_exif,
-                self.config.jpeg_quality,
-            );
+                exif_bytes: dispatch_exif,
+                jpeg_quality: self.config.jpeg_quality,
+            });
         }
 
         let mut variants: Vec<ImageVariant> = variant_specs
@@ -403,13 +422,13 @@ impl ImageProcessor {
                 let _ = save_cached_info(&original_path, info.width, info.height, &info.exif);
             }
             return Ok(Some(self.build_processed_from_dimensions(
-                reference,
-                &original_path,
-                format,
-                extension,
-                info.width,
-                info.height,
-                &info.exif,
+                ProcessedImageInput {
+                    reference,
+                    original_path: &original_path,
+                    format,
+                    extension,
+                    info: &info,
+                },
             )));
         }
 
@@ -426,13 +445,13 @@ impl ImageProcessor {
             fs::create_dir_all(&self.cache_dir)?;
             let _ = save_cached_info(&original_path, info.width, info.height, &info.exif);
             return Ok(Some(self.build_processed_from_dimensions(
-                reference,
-                &original_path,
-                format,
-                extension,
-                info.width,
-                info.height,
-                &info.exif,
+                ProcessedImageInput {
+                    reference,
+                    original_path: &original_path,
+                    format,
+                    extension,
+                    info: &info,
+                },
             )));
         }
 
@@ -550,16 +569,16 @@ impl ImageProcessor {
         Ok(ExifCache::Unknown)
     }
 
-    fn build_processed_from_dimensions(
-        &self,
-        reference: &str,
-        original_path: &Path,
-        format: ImageFormat,
-        extension: &str,
-        width: u32,
-        height: u32,
-        exif: &ExifCache,
-    ) -> ProcessedImage {
+    fn build_processed_from_dimensions(&self, input: ProcessedImageInput<'_>) -> ProcessedImage {
+        let ProcessedImageInput {
+            reference,
+            original_path,
+            format,
+            extension,
+            info,
+        } = input;
+        let width = info.width;
+        let height = info.height;
         let mime_type = mime_type_for_format(format).to_string();
         let (display_width, display_height, is_wide) =
             compute_display_dimensions(width as f64, height as f64, self.config.layout_width);
@@ -605,7 +624,7 @@ impl ImageProcessor {
             display_width,
             display_height,
             original_reference: reference.to_string(),
-            exif: exif_summary_from_cache(exif),
+            exif: exif_summary_from_cache(&info.exif),
             is_wide,
         }
     }
@@ -1039,22 +1058,24 @@ fn generate_variant_file(
     Ok(())
 }
 
-fn schedule_resize_generation(
-    reference: String,
-    bytes: Arc<[u8]>,
-    format: ImageFormat,
-    orientation: Option<u16>,
-    jobs: Vec<VariantJob>,
-    dimension_cache: Option<DimensionCacheWrite>,
-    exif_bytes: Option<Arc<Vec<u8>>>,
-    jpeg_quality: u8,
-) {
-    if jobs.is_empty() {
+fn schedule_resize_generation(request: ResizeGenerationRequest) {
+    if request.jobs.is_empty() {
         return;
     }
 
     let dispatcher = Arc::clone(&RESIZE_DISPATCHER);
     dispatcher.spawn(move || {
+        let ResizeGenerationRequest {
+            reference,
+            bytes,
+            format,
+            orientation,
+            jobs,
+            dimension_cache,
+            exif_bytes,
+            jpeg_quality,
+        } = request;
+
         eprintln!("[images] loading full-size {}", reference);
         let start = Instant::now();
         let mut image = match decode_full_image(bytes.as_ref(), format) {

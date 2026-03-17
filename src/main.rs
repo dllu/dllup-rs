@@ -550,9 +550,13 @@ fn directory_has_private_marker(dir: &Path) -> bool {
     marker_path.is_file()
 }
 
+fn directory_or_ancestor_has_private_marker(dir: &Path) -> bool {
+    dir.ancestors().any(directory_has_private_marker)
+}
+
 fn page_is_private(path: &Path) -> bool {
     path.parent()
-        .map(directory_has_private_marker)
+        .map(directory_or_ancestor_has_private_marker)
         .unwrap_or(false)
 }
 
@@ -611,7 +615,7 @@ fn build_blog_index(
                     .parent()
                     .map(|p| p == blog_root.as_path())
                     .unwrap_or(false);
-                if matches_root && !directory_has_private_marker(dir) {
+                if matches_root && !directory_or_ancestor_has_private_marker(dir) {
                     Some(entry.clone())
                 } else {
                     None
@@ -644,7 +648,7 @@ fn build_blog_index(
             }
 
             let post_dir = entry.path();
-            if directory_has_private_marker(&post_dir) {
+            if directory_or_ancestor_has_private_marker(&post_dir) {
                 continue;
             }
             let source = match find_blog_article_source(&post_dir)? {
@@ -1013,7 +1017,7 @@ fn register_blog_post_if_applicable(
         None => return,
     };
 
-    if directory_has_private_marker(post_dir) {
+    if directory_or_ancestor_has_private_marker(post_dir) {
         return;
     }
 
@@ -1117,4 +1121,23 @@ fn collapse_whitespace(input: &str) -> String {
         result.pop();
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::directory_or_ancestor_has_private_marker;
+    use std::fs;
+
+    #[test]
+    fn private_marker_applies_recursively_to_descendants() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let parent = temp.path().join("blog");
+        let child = parent.join("2026").join("post");
+
+        fs::create_dir_all(&child).expect("create nested directories");
+        fs::write(parent.join("private"), "").expect("write private marker");
+
+        assert!(directory_or_ancestor_has_private_marker(&parent));
+        assert!(directory_or_ancestor_has_private_marker(&child));
+    }
 }
