@@ -1,12 +1,12 @@
-dllup markup language
-
-===
+# dllup markup language
 
 a simple markup language for personal blog
 
-* has first class support for math equations that get rendered to svg images. your static webpage won't jump around as stuff are rendering/drawing.
+* renders math with KaTeX HTML during site generation. pages stay static with no client-side math rendering.
+* precomputes image dimensions, so lazily loaded photos do not cause layout shifts.
+* generates thumbnails, includes EXIF metadata in captions, and handles large photo libraries with parallel image resizing.
 
-## Configuration
+## config
 
 Run the binary with `dllup-rs <input.dllu> [config.toml]`. If a config path is not provided, the tool looks for `dllup.toml` next to the input file. Missing config files fall back to built-in defaults.
 
