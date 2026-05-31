@@ -763,7 +763,14 @@ impl HtmlRenderer {
             InlineElement::Link { text, url } => {
                 let inner = self.render_inlines(text);
                 let href = self.escape_url(url);
-                format!("<a href=\"{}\">{}</a>", href, inner)
+                if is_page_anchor_reference_url(url) {
+                    format!(
+                        "<a class=\"refname\" href=\"{}\"><cite>{}</cite></a>",
+                        href, inner
+                    )
+                } else {
+                    format!("<a href=\"{}\">{}</a>", href, inner)
+                }
             }
             InlineElement::Emphasis(content) => {
                 let inner = self.render_inlines(content);
@@ -855,6 +862,16 @@ fn extract_text(elements: &[InlineElement]) -> String {
         }
     }
     out
+}
+
+fn is_page_anchor_reference_url(url: &str) -> bool {
+    let Some(fragment) = url.strip_prefix('#') else {
+        return false;
+    };
+    !fragment.is_empty()
+        && fragment
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ':'))
 }
 
 fn html_fragment_text(input: &str) -> String {
@@ -1495,6 +1512,29 @@ mod tests {
             url: "/foo.html".into(),
         }]);
         assert!(html.contains("href=\"https://example.com/foo.html\""));
+    }
+
+    #[test]
+    fn page_anchor_links_render_as_refname_links() {
+        let mut r = renderer_with_config(crate::config::Config::default());
+        let html = r.render_inlines(&[InlineElement::Link {
+            text: vec![InlineElement::Text("eade".into())],
+            url: "#eade".into(),
+        }]);
+        assert_eq!(
+            html,
+            "<a class=\"refname\" href=\"#eade\"><cite>eade</cite></a>"
+        );
+    }
+
+    #[test]
+    fn state_hash_links_do_not_render_as_refname_links() {
+        let mut r = renderer_with_config(crate::config::Config::default());
+        let html = r.render_inlines(&[InlineElement::Link {
+            text: vec![InlineElement::Text("3922832263383".into())],
+            url: "#0.36/3922832263383".into(),
+        }]);
+        assert_eq!(html, "<a href=\"#0.36/3922832263383\">3922832263383</a>");
     }
 
     #[test]
