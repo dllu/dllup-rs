@@ -1,14 +1,63 @@
-# dllup markup language
+# dllup-rs
 
-a simple markup language for personal blog
+A custom Markdown renderer and static site generator for
+[daniel.lawrence.lu](https://daniel.lawrence.lu).
 
-* renders math with KaTeX HTML during site generation. pages stay static with no client-side math rendering.
-* precomputes image dimensions, so lazily loaded photos do not cause layout shifts.
-* generates thumbnails, includes EXIF metadata in captions, and handles large photo libraries with parallel image resizing.
+The input format is Markdown, parsed with `markdown-rs`. The renderer is custom
+because the site needs opinionated handling for photos, math, tables, blog
+indexes, feeds, and metadata.
+
+* renders math with KaTeX HTML during site generation, so pages stay static with
+  no client-side math rendering.
+* precomputes image dimensions, so lazily loaded photos do not cause layout
+  shifts.
+* generates thumbnails, includes EXIF metadata in captions, and handles large
+  photo libraries with parallel image resizing.
+* generates blog indexes, RSS feeds, sitemaps, Open Graph tags, and a nested
+  table of contents.
+
+## markdown conventions
+
+Most content is ordinary Markdown. The renderer adds a few site-specific
+conventions:
+
+* YAML front matter supplies page metadata:
+
+  ```md
+  ---
+  title: Page title
+  date: 2026-01-31
+  ---
+  ```
+
+* Image-only paragraphs become captioned figures. The image label is used as
+  both the alt text and visible caption:
+
+  ```md
+  ![Purple Puppy driving a Porsche 356A Speedster](porsche.svg)
+  ```
+
+* GitHub-flavored Markdown tables can be followed by a separate `Table:`
+  paragraph to render a table caption.
+* Inline math uses `$...$`; display math uses `$$` fences.
+* Raw HTML is passed through for pages that need custom demos or embeds.
+* Big buttons use the small renderer extension `:: Label https://example.com`.
+
+See `docs/markdown-migration.md` and `example/blog/doc/index.md` for more
+syntax notes.
 
 ## config
 
-Run the binary with `dllup-rs <input.dllu> [config.toml]`. If a config path is not provided, the tool looks for `dllup.toml` next to the input file. Missing config files fall back to built-in defaults.
+Run the binary with `dllup-rs <input.md|directory> [config.toml]`. If a config
+path is not provided, the tool looks for `dllup.toml` next to the input file.
+Missing config files fall back to built-in defaults.
+
+For example:
+
+```sh
+cargo run -- example/index.md dllup.toml
+cargo run -- example dllup.toml
+```
 
 All settings live inside the TOML file. Available keys:
 
@@ -61,18 +110,14 @@ Math is rendered to inline HTML (KaTeX-compatible). When `math.command` is set t
 When `root_url` is configured, any link or image whose URL starts with `/` is prefixed with that root (e.g., `/foo.html` becomes `https://example.com/foo.html`). The configured `css_href` follows the same rules when it is relative. Image assets can opt into a dedicated CDN by setting `images.img_root_url`; when omitted, `root_url` continues to be used.
 
 The template is rendered by replacing `{{title}}`, `{{css}}`, `{{tableofcontents}}`, `{{metas}}`, and `{{body}}`. A nested table of contents is generated from the section headings; include `{{tableofcontents}}` inside the template to display it. The `{{metas}}` placeholder is populated with Open Graph / Twitter tags derived from the first paragraph and first image, along with sensible defaults for robots and card type.
-* supports cross references references and tables
-* responsive images rendered with `<img>` `srcset` (cached resizing, EXIF-aware layout, downloadable variants)
-* html5 semantic figure and figcaption for images
-* implemented in rust for some reason
 
-## Vim Syntax Highlighting
+## development
 
-1. Copy `vim/dllup.vim` into your runtime: `mkdir -p ~/.vim/syntax ~/.vim/ftdetect` and then `cp vim/dllup.vim ~/.vim/syntax/dllup.vim`. For Neovim use `~/.config/nvim` instead of `~/.vim`.
-2. Create `~/.vim/ftdetect/dllup.vim` (or the Neovim equivalent) with:
+After changes, run:
 
-   ```vim
-   au BufRead,BufNewFile *.dllu,*.dllup set filetype=dllup
-   ```
-
-Reload Vim and files ending in `.dllu` or `.dllup` will pick up the syntax.
+```sh
+cargo check
+cargo test
+cargo clippy --all-targets -- -D warnings
+cargo run -- example dllup.toml
+```
