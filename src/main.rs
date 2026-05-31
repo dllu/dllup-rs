@@ -228,7 +228,8 @@ fn process_file(
     let t2 = Instant::now();
     let toc_html = renderer.table_of_contents_html();
     let toc_str = toc_html.as_deref().unwrap_or("");
-    let metas = renderer.meta_tags(title);
+    let mut metas = renderer.meta_tags(title);
+    append_markdown_alternate_link(&mut metas, input_path);
     let blog_index = build_blog_index(input_path, site_root, &config)?;
     let index_html_str = blog_index
         .as_ref()
@@ -862,6 +863,22 @@ fn escape_html_text(input: &str) -> String {
     escape_html_attr_simple(input)
 }
 
+fn append_markdown_alternate_link(head: &mut String, input_path: &Path) {
+    let Some(file_name) = input_path.file_name().and_then(|name| name.to_str()) else {
+        return;
+    };
+
+    if !head.is_empty() {
+        if !head.ends_with('\n') {
+            head.push('\n');
+        }
+        head.push_str("  ");
+    }
+    head.push_str("<link rel=\"alternate\" type=\"text/markdown\" href=\"");
+    head.push_str(&escape_html_attr_simple(file_name));
+    head.push_str("\">\n");
+}
+
 fn generate_rss_feed(
     _site_root: Option<&Path>,
     blog_index: &BlogIndex,
@@ -1153,8 +1170,12 @@ fn collapse_whitespace(input: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{collect_source_files, directory_or_ancestor_has_private_marker};
+    use super::{
+        append_markdown_alternate_link, collect_source_files,
+        directory_or_ancestor_has_private_marker,
+    };
     use std::fs;
+    use std::path::Path;
 
     #[test]
     fn private_marker_applies_recursively_to_descendants() {
@@ -1187,5 +1208,15 @@ mod tests {
 
         let files = collect_source_files(temp.path()).expect("collect source files");
         assert_eq!(files, vec![temp.path().join("index.md")]);
+    }
+
+    #[test]
+    fn markdown_alternate_link_uses_source_filename() {
+        let mut head = String::from("<meta name=\"description\" content=\"Example\">\n");
+        append_markdown_alternate_link(&mut head, Path::new("/site/blog/post/index.md"));
+
+        assert!(
+            head.contains("<link rel=\"alternate\" type=\"text/markdown\" href=\"index.md\">\n")
+        );
     }
 }
