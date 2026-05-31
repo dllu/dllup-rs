@@ -1,8 +1,8 @@
-SE(3) constraints for robotics
+---
+title: "SE(3) constraints for robotics"
+date: "2025-01-01"
+---
 
-2025-01-01
-
-===
 
 This document summarizes some common maths used for state estimation of rigid bodies such as in robotics.
 
@@ -10,10 +10,12 @@ This document summarizes some common maths used for state estimation of rigid bo
 
 Rigid transformations in 3 dimensions are known as the special Euclidean group, $SE(3)$, and can be written in the _homogeneous_ form.
 
-$ \mathbf T_{4\times 4} = \begin{bmatrix}
+$$
+\mathbf T_{4\times 4} = \begin{bmatrix}
 \mathbf R_{3\times 3} & \mathbf t_{3\times 1}\\
 \mathbf 0_{1\times 3} & 1
 \end{bmatrix} \in SE(3).
+$$
 
 The rotation matrix $\mathbf R$ is in the special orthogonal group $SO(3)$, which means that it is orthogonal (its columns are normal and orthogonal to each other) and it has determinant $+1$.
 
@@ -21,21 +23,28 @@ The rotation matrix $\mathbf R$ is in the special orthogonal group $SO(3)$, whic
 
 An element $\mathbf T \in SE(3)$ may transform a 3D point $\mathbf p \in \mathbb R^3$:
 
-$ \mathbf p_{3\times 1} &= \begin{bmatrix}x\\y\\z\end{bmatrix}.
+$$
+\mathbf p_{3\times 1} &= \begin{bmatrix}x\\y\\z\end{bmatrix}.
+$$
 
 In this document we use it interchangeably with the homogeneous representation:
 
-$ \mathbf p_{4\times 1} = \begin{bmatrix}x\\ y\\ z\\ 1\end{bmatrix}
+$$
+\mathbf p_{4\times 1} = \begin{bmatrix}x\\ y\\ z\\ 1\end{bmatrix}
+$$
 
 so that points may be transformed rigidly
 
-$ \mathbf T \mathbf p \equiv \mathbf R \mathbf p + \mathbf t.
+$$
+\mathbf T \mathbf p \equiv \mathbf R \mathbf p + \mathbf t.
+$$
 
 ## The Lie algebra
 
 Each element in $SE(3)$ is associated with an element on the corresponding Lie algebra, $\mathfrak{se}(3)$:
 
-$ \bm \xi_{4\times 4} &= \begin{bmatrix}
+$$
+\bm \xi_{4\times 4} &= \begin{bmatrix}
 [\bm \omega]_\times & \bm \tau\\
 \mathbf 0_{1 \times 3} & 0
 \end{bmatrix} \in \mathfrak{se}(3)\\
@@ -45,13 +54,16 @@ $ \bm \xi_{4\times 4} &= \begin{bmatrix}
 -\omega_2 & \omega_1 & 0 & \tau_3\\
 0 & 0 & 0 & 0
 \end{bmatrix} \in \mathfrak{se}(3)
+$$
 
 where $[\bm \omega]_\times$ is the skew symmetric form of the cross product by $\omega$. We may also write it as a $6\times 1$ vector.
 
-$ \bm \xi_{6\times 1} = \begin{bmatrix}
+$$
+\bm \xi_{6\times 1} = \begin{bmatrix}
 \bm \omega_{3\times 1}\\
 \bm \tau_{3\times 1}
 \end{bmatrix}.
+$$
 
 We will use the $6\times 1$ and $4\times 4$ representations interchangeably depending on context.
 
@@ -61,41 +73,49 @@ Note that some other textbooks put the translational part on top and the rotatio
 
 The group $SE(3)$ and its algebra $\mathfrak{se}(3)$ are related by the exponential map:
 
-$ \exp &: \mathfrak{se}(3) \rightarrow SE(3)\\
+$$
+\exp &: \mathfrak{se}(3) \rightarrow SE(3)\\
 \log &: SE(3) \rightarrow \mathfrak{se}(3).
+$$
 
 The definition of $\exp$ is based on the Taylor series:
 
-$ \exp(\bm \xi) = \mathbf I_{4\times 4} + \bm \xi_{4\times 4}
+$$
+\exp(\bm \xi) = \mathbf I_{4\times 4} + \bm \xi_{4\times 4}
 + \frac{1}{2!} \bm \xi_{4\times 4}^2
 + \frac{1}{3!} \bm \xi_{4\times 4}^3 \ldots
+$$
 
 Closed forms exist.
-See: [J. L. Blanco's report](http://ingmec.ual.es/~jlblanco/papers/jlblanco2010geometry3D_techrep.pdf) (#jlblanco).
+See: [J. L. Blanco's report](http://ingmec.ual.es/~jlblanco/papers/jlblanco2010geometry3D_techrep.pdf) [jlblanco](#jlblanco).
 
 Note that $SE(3)$ is not commutative. The adjoint action relates things in different orders:
 
-$ \mathbf T \exp(\bm \delta) = \exp\left(\operatorname{Ad}(\mathbf T) \bm \delta\right) \mathbf T.
+$$
+\mathbf T \exp(\bm \delta) = \exp\left(\operatorname{Ad}(\mathbf T) \bm \delta\right) \mathbf T.
+$$
 
 The adjoint is a $6\times 6$ matrix:
 
-$ \operatorname{Ad}(\mathbf T) = \begin{bmatrix}
+$$
+\operatorname{Ad}(\mathbf T) = \begin{bmatrix}
 \mathbf R & \mathbf 0_{3\times 3}\\
 [\mathbf t]_\times \mathbf R & \mathbf R
 \end{bmatrix}.
+$$
 
 ## Notation summary
 
 In general,
 
-* bold lowercase refers to vectors (e.g. translation $\mathbf t$)
-* bold uppercase refers to matrices (e.g. transformation $\mathbf T$)
-* non-bold lowerase refers to scalars (e.g. time $t$)
+- bold lowercase refers to vectors (e.g. translation $\mathbf t$)
+- bold uppercase refers to matrices (e.g. transformation $\mathbf T$)
+- non-bold lowerase refers to scalars (e.g. time $t$)
 
 Here we define and summarise some notation for the following sections.
 
 | Description | Notation |
-|-----------
+| --- | --- |
 | skew-symmetric cross product matrix $\begin{bmatrix}0 & -t_3 & t_2\\t_3 & 0 & -t_1\\-t_2 & t_1 & 0\end{bmatrix}$ | $[\mathbf t]_\times$ |
 | translational part of $\mathbf T \in SE(3)$ | $\mathbf t(\mathbf T)$ |
 | rotational part of $\mathbf T \in SE(3)$ | $\mathbf R(\mathbf T)$ |
@@ -111,11 +131,12 @@ Here we define and summarise some notation for the following sections.
 | inverse of $\bm \omega \in \mathfrak{so}(3)$ | $-\bm \omega$ |
 | inverse of $\mathbf R \in SO(3)$ | $\mathbf R^T$ |
 | adjoint of $\mathbf T \in SE(3)$ | $\operatorname{Ad}(\mathbf T)$ |
-| $i$th element of $\lbrace \bm \xi\vert \bm \xi \in \mathfrak{se}(3)\rbrace$  | $\bm \xi_i$ |
-| $i$th element of $\lbrace \mathbf T \vert \mathbf T \in SE(3)\rbrace$  | $\mathbf T_i$ |
+| $i$th element of $\lbrace \bm \xi\vert \bm \xi \in \mathfrak{se}(3)\rbrace$ | $\bm \xi_i$ |
+| $i$th element of $\lbrace \mathbf T \vert \mathbf T \in SE(3)\rbrace$ | $\mathbf T_i$ |
 | transform $\mathbf p \in \mathbb R^3$ by $\mathbf T \in SE(3)$ | $\mathbf T \mathbf p$ |
 | transform $\mathbf p \in \mathbb R^3$ by $\bm \xi \in \mathfrak{se}(3)$ | $\exp(\bm \xi) \mathbf p$ |
-Summary of notation and implementation. For the array ones, operations are applied elementwise.
+
+Table: Summary of notation and implementation. For the array ones, operations are applied elementwise.
 
 # Derivatives
 
@@ -124,7 +145,8 @@ Here, we only differentiate with respect to $\bm \delta \in \mathfrak{se}(3)$ ar
 Suppose $\bm \delta = \begin{bmatrix}\bm \omega & \bm \tau\end{bmatrix}^T$.
 If $\mathbf F$ is of dimension $n$, then the resulting derivative is an $n\times 6$ Jacobian.
 
-$ \mathbf J_{n\times 6} \equiv \left.\frac{\partial \mathbf F(\mathbf T \oplus \bm \delta)}{\partial \bm \delta}\right]_{\bm \delta = \mathbf 0} &=
+$$
+\mathbf J_{n\times 6} \equiv \left.\frac{\partial \mathbf F(\mathbf T \oplus \bm \delta)}{\partial \bm \delta}\right]_{\bm \delta = \mathbf 0} &=
 \begin{bmatrix}
 \frac{\partial F_1}{\partial \omega_1} &
 \frac{\partial F_1}{\partial \omega_2} &
@@ -140,68 +162,84 @@ $ \mathbf J_{n\times 6} \equiv \left.\frac{\partial \mathbf F(\mathbf T \oplus \
 \frac{\partial F_n}{\partial \tau_2} &
 \frac{\partial F_n}{\partial \tau_3} \\
 \end{bmatrix}
+$$
 
 where $\mathbf F(\mathbf T \oplus \bm \delta) = \mathbf F(\exp(\bm \delta)\mathbf T)$ in the case of left-perturbations and $\mathbf F(\mathbf T\exp(\bm \delta))$ in the case of right-perturbations.
 
 The adjoint action can be used to relate the left and right derivatives by using the chain rule.
 
-$ \frac{\partial \mathbf F(\mathbf A \exp(\bm \delta) \mathbf B)}{\partial \bm \delta}
+$$
+\frac{\partial \mathbf F(\mathbf A \exp(\bm \delta) \mathbf B)}{\partial \bm \delta}
 &= \frac{\partial \mathbf F(\exp(\operatorname{Ad}(\mathbf A) \bm \delta) \mathbf{AB})}{\partial \bm \delta}\\
 &= \frac{\partial}{\partial \bm \delta} \mathbf F(\exp(\underbrace{\operatorname{Ad}(\mathbf A) \bm \delta}_{\bm \epsilon}) \mathbf{AB})\\
 &= \frac{\partial}{\partial \bm \epsilon} \mathbf F(\exp(\bm \epsilon) \mathbf{AB}) \frac{\partial \bm \epsilon}{\partial \bm \delta}\\
 &= \frac{\partial}{\partial \bm \epsilon} \mathbf F(\exp(\bm \epsilon) \mathbf{AB}) \operatorname{Ad}(\mathbf A).
+$$
 
 We also have a derivative of the log function:
 
-$ \mathbf D_\text{log}(\mathbf T) &\equiv \left.\frac{\partial}{\partial \bm \delta}\right]_{\bm \delta = \mathbf 0_{6\times 1}}\log(\exp(\bm \delta) \mathbf T)\\
+$$
+\mathbf D_\text{log}(\mathbf T) &\equiv \left.\frac{\partial}{\partial \bm \delta}\right]_{\bm \delta = \mathbf 0_{6\times 1}}\log(\exp(\bm \delta) \mathbf T)\\
 &= \begin{bmatrix}
 \mathbf D_\text{log}(\bm \omega) & 
 \mathbf 0_{3\times 3} \\
 -\mathbf D_\text{log}(\bm \omega) \mathbf B \mathbf D_\text{log}(\bm \omega) &
 \mathbf D_\text{log}(\bm \omega)
 \end{bmatrix}
+$$
 
 where
 
-$ \mathbf D_\text{log}(\bm \omega) &= \mathbf I - \frac{1}{2} [\bm \omega_\times] + e_\theta [\bm \omega]_\times^2\\
+$$
+\mathbf D_\text{log}(\bm \omega) &= \mathbf I - \frac{1}{2} [\bm \omega_\times] + e_\theta [\bm \omega]_\times^2\\
 \mathbf B &\equiv b_\theta [ \mathbf u]_\times + c_\theta (\bm \omega \mathbf u^T + \mathbf u \bm \omega^T) + (\bm \omega^t \mathbf u) \cdot \mathbf W(\bm \omega)\\
 \theta &= \|\bm \omega\|\\
 a_\theta &= \frac{\sin\theta}{\theta}\\
 b_\theta &= \frac{1-\cos\theta}{\theta^2}\\
 c_\theta &= \frac{1-a_\theta}{\theta^2}\\
 e_\theta &= \frac{b_\theta - 2c_\theta}{2a_\theta}
+$$
 
-The exact derivation is in [Ethan Eade's report](http://ethaneade.com/exp_diff.pdf) (#eade).
+The exact derivation is in [Ethan Eade's report](http://ethaneade.com/exp_diff.pdf) [eade](#eade).
 
 Let $\mathbf T \in SE(3)$, $\mathbf p \in \mathbb R^3$, then the following table lists some useful derivatives.
 
 As you will see later, these are basically all the derivatives you need, and all other derivatives can be easily derived from these, often together with using the adjoint.
 
 | Function | Derivative |
+| --- | --- |
 | $\mathbf F(\bm \delta)$ | $\left.\frac{\partial \mathbf F}{\partial \bm\delta} \right]_{\bm \delta = \mathbf 0}$ |
-|--------
 | $\exp(\bm \delta) \mathbf T \mathbf p$ | $\begin{bmatrix}-[\mathbf T \mathbf p]_\times & \mathbf I\end{bmatrix}$ |
 | $\mathbf T \exp(\bm \delta) \mathbf p$ | $\mathbf R(\mathbf T) \begin{bmatrix}-[\mathbf p]_\times & \mathbf I\end{bmatrix}$ |
 | $\log(\exp(\bm \delta) \mathbf T)$ | $\mathbf D_\text{log} (\mathbf T)$ |
-Summary of derivatives
+
+Table: Summary of derivatives
 
 # Optimisation
 
 Suppose we have a trajectory $\mathbf S(t) \in SE(3)$ that is a smooth curve. We would like to minimise some objective function:
 
-$ \operatorname{cost}(\mathbf S) = \mathbf F(\mathbf S)^T \mathbf F(\mathbf S).
+$$
+\operatorname{cost}(\mathbf S) = \mathbf F(\mathbf S)^T \mathbf F(\mathbf S).
+$$
 
 We seek to reduce the cost as much as possible. This is a nonlinear least squares problem. During the optimisation process, we perturb it by a small perturbation $\bm \delta(t) \in \mathfrak{se}(3)$:
 
-$ \mathbf S_{\text{new}}(t) = \mathbf S(t) \oplus \bm\delta(t)
+$$
+\mathbf S_{\text{new}}(t) = \mathbf S(t) \oplus \bm\delta(t)
+$$
 
 where the $\oplus$ operator can either be the left-update:
 
-$ \mathbf S \oplus \bm \delta \equiv \exp(\bm\delta) \mathbf S
+$$
+\mathbf S \oplus \bm \delta \equiv \exp(\bm\delta) \mathbf S
+$$
 
 or the right-update:
 
-$ \mathbf S \oplus \bm \delta \equiv \mathbf S \exp(\bm\delta).
+$$
+\mathbf S \oplus \bm \delta \equiv \mathbf S \exp(\bm\delta).
+$$
 
 Both are valid depending on numerical properties of the problem.
 
@@ -209,19 +247,27 @@ In any case, we linearise the problem around $\bm \delta = \mathbf 0$.
 
 Let the Jacobian matrix be:
 
-$ \mathbf J = \left. \frac{\partial}{\partial \bm \delta} \mathbf F(\mathbf S \oplus \bm\delta) \right]_{\bm \delta = 0}.
+$$
+\mathbf J = \left. \frac{\partial}{\partial \bm \delta} \mathbf F(\mathbf S \oplus \bm\delta) \right]_{\bm \delta = 0}.
+$$
 
 Then we can solve $\bm \delta$ using Gauss-Newton:
 
-$ \mathbf J^T \mathbf J \bm \delta_\text{GN} = -\mathbf J^T \mathbf F
+$$
+\mathbf J^T \mathbf J \bm \delta_\text{GN} = -\mathbf J^T \mathbf F
+$$
 
 or steepest descent:
 
-$ \bm \delta_\text{s} = -\mathbf J^T \mathbf F
+$$
+\bm \delta_\text{s} = -\mathbf J^T \mathbf F
+$$
 
 or more sophisticated algorithms. In practice, we use Powell's Dog Leg. The update is
 
-$ \bm \delta = c_\text{GN} \bm \delta_\text{GN} + c_\text{s} \bm \delta_\text{s}
+$$
+\bm \delta = c_\text{GN} \bm \delta_\text{GN} + c_\text{s} \bm \delta_\text{s}
+$$
 
 where scalar weights $c_\text{GN}$, $c_\text{s}$ are chosen such that $\|\bm \delta \| \leq \Delta$ where the scalar parameter $\Delta$ is the radius of the _trust region_. When $\Delta$ is small, the problem is behaving badly and the quadratic approximation that Gauss-Newton uses is not very valid. In this case, $c_\text{GN}$ is zero, allowing the optimiser to take timid steps along the steepest descent direction. When $\Delta$ is large, the quadratic approximation is good and we take bigger steps in the Gauss-Newton direction.
 
@@ -231,21 +277,29 @@ Heuristics are used to determine when to increase $\Delta$ and when to decrease 
 
 When uncertainty is present, the data is associated with some covariance matrix $\bm \Sigma$ which is an $n\times n$ matrix where $n$ is the sise of the residual. The Gauss-Newton update then becomes:
 
-$ \mathbf J^T \bm \Sigma^{-1} \mathbf J \bm \delta = -\mathbf J^T \bm \Sigma^{-1} \mathbf F
+$$
+\mathbf J^T \bm \Sigma^{-1} \mathbf J \bm \delta = -\mathbf J^T \bm \Sigma^{-1} \mathbf F
+$$
 
 The matrix  $\bm \Sigma^{-1}$ is also sometimes called the _information matrix_. In practice, it is useful to factor this matrix, for example, by taking the matrix square root. Let $\mathbf W = \bm \Sigma^{-\frac{1}{2}}$, then,
 
-$ (\mathbf W\mathbf J)^T (\mathbf W\mathbf J) \bm \delta = -(\mathbf W \mathbf J)^T (\mathbf W \mathbf F).
+$$
+(\mathbf W\mathbf J)^T (\mathbf W\mathbf J) \bm \delta = -(\mathbf W \mathbf J)^T (\mathbf W \mathbf F).
+$$
 
 In other words, we just pre-multiply the Jacobian and residual by a weight matrix. This is a form of _whitening_. In the common case where $\bm \Sigma$ is a diagonal matrix, we simply divide each row of the Jacobian and the residual by the standard deviation.
 
 Another common factorisation is the eigendecomposition of the covariance matrix $\bm \Sigma$:
 
-$ \bm \Sigma = \mathbf Q \bm \Lambda \mathbf Q^T
+$$
+\bm \Sigma = \mathbf Q \bm \Lambda \mathbf Q^T
+$$
 
 where $\mathbf Q \in SO(n)$ is the square matrix whose columns are the orthonormal eigenvectors of $\bm \Sigma$ and $\bm \Lambda$ is the diagonal matrix whose entries are the eigenvalues. Then,
 
-$ \mathbf W = \bm \Lambda^{-\frac{1}{2}} \mathbf Q^T.
+$$
+\mathbf W = \bm \Lambda^{-\frac{1}{2}} \mathbf Q^T.
+$$
 
 This is useful, for example, in the case of surfel matches. Recall that the covariance matrix is always symmetric positive semidefinite, allowing for easy eigendecomposition.
 
@@ -253,27 +307,37 @@ This is useful, for example, in the case of surfel matches. Recall that the cova
 
 A least squares problem can be thought of as minimising the negative log likelihood function of a Gaussian. The likelihood function is of the form
 
-$ \mathcal L = \prod \exp(-f_i^2)
+$$
+\mathcal L = \prod \exp(-f_i^2)
+$$
 
 Then, the log likelihood is of the least squares form:
 
-$ \operatorname{cost} = -\log \mathcal L = \sum f_i^2.
+$$
+\operatorname{cost} = -\log \mathcal L = \sum f_i^2.
+$$
 
 However, in many cases, the random variable is not Gaussian. The Gaussian has very thin tails, making it incredibly unlikely to have outliers. In the real life, there are often many outliers that necessitate a more thick-tailed distribution. To model such situations, we need robust loss functions.
 
 Instead of optimising $\sum f_i^2$, we optimise:
 
-$ \operatorname{cost} = \sum \rho(f_i)^2
+$$
+\operatorname{cost} = \sum \rho(f_i)^2
+$$
 
 where $\rho$ is a robust loss function. We can then weigh each row or block of the Jacobian $\mathbf J$ and the residual $\mathbf F$ with a robust _reweighting factor_:
 
-$ r_i \equiv \frac{\partial \rho(f_i)}{\partial f_i}.
+$$
+r_i \equiv \frac{\partial \rho(f_i)}{\partial f_i}.
+$$
 
-| Name | Definition
-| `TrivialLoss` | $\rho(x) = x$
-| `CauchyLoss` | $\rho(x) = \log(1 + x)$
-| `HuberLoss` | $\rho(x) = \begin{cases} x & x < k\\2 k\sqrt{x} - k^2 & x \geq k^2\end{cases}$
-Some loss functions for $x = |f|$.
+| Name | Definition |
+| --- | --- |
+| `TrivialLoss` | $\rho(x) = x$ |
+| `CauchyLoss` | $\rho(x) = \log(1 + x)$ |
+| `HuberLoss` | $\rho(x) = \begin{cases} x & x < k\\2 k\sqrt{x} - k^2 & x \geq k^2\end{cases}$ |
+
+Table: Some loss functions for $x = |f|$.
 
 # Trajectory representation
 
@@ -283,25 +347,29 @@ We may assume the curve does not oscillate faster than some frequency (say, 10~H
 
 Now we should find a trajectory representation that satisfies the following properties:
 
-* For some finite period of time, the trajectory should be approximately correct and differentiable.
-* For any given real number $t$ within the domain of the curve, we can efficiently evaluate $\mathbf S(t)$ in constant time.
-* Local perturbations $\bm \delta (t)$ may be applied to the curve, so that $\mathbf S_\text{new}(t) = \mathbf S(t) \oplus \bm \delta(t)$, such that the perturbation $\bm \delta(t)$ may be parameterised with a finite number of parameters, each with compact support.
-* The trajectory must be independent of the choice of the inertial reference frame.
+- For some finite period of time, the trajectory should be approximately correct and differentiable.
+- For any given real number $t$ within the domain of the curve, we can efficiently evaluate $\mathbf S(t)$ in constant time.
+- Local perturbations $\bm \delta (t)$ may be applied to the curve, so that $\mathbf S_\text{new}(t) = \mathbf S(t) \oplus \bm \delta(t)$, such that the perturbation $\bm \delta(t)$ may be parameterised with a finite number of parameters, each with compact support.
+- The trajectory must be independent of the choice of the inertial reference frame.
 
 Our solution to satisfy these requirements is a piecewise linear trajectory.
 The trajectory is represented as a sequence of elements $\mathbf S_i$ that represent $\mathbf S(t_i)$ for some $t_i$ sampled with even spacing at a high frequency (say, 100~Hz).
 To evaluate $\mathbf S(t)$, we use a geodesic interpolation for $t_i \leq t < t_{i + 1}$.
 
-$ \mathbf S(t) = \exp((t - t_i) \log(\mathbf S_{i + 1} \mathbf S_i^{-1})) \mathbf S_i.
+$$
+\mathbf S(t) = \exp((t - t_i) \log(\mathbf S_{i + 1} \mathbf S_i^{-1})) \mathbf S_i.
+$$
 
 To perturb this spline with a curve $\bm \delta(t)$, we update each $\mathbf S_i$, like so:
 
-$ \mathbf S_{i, \text{new}} = \mathbf S_i \oplus \bm \delta(t_i)
+$$
+\mathbf S_{i, \text{new}} = \mathbf S_i \oplus \bm \delta(t_i)
+$$
 
 Alternative approaches for parameterising trajectories include:
 
-* [Cumulative cubic B-splines.](http://www.bmva.org/bmvc/2013/Papers/paper0093/paper0093.pdf)
-* [Hermite splines.](http://ethaneade.com/lie_spline.pdf)
+- [Cumulative cubic B-splines.](http://www.bmva.org/bmvc/2013/Papers/paper0093/paper0093.pdf)
+- [Hermite splines.](http://ethaneade.com/lie_spline.pdf)
 
 # Parameterisation of the perturbation
 
@@ -310,27 +378,35 @@ When applying perturbations, the curve $\bm \delta$ is a smooth curve which may 
 To ensure that the problem is computationally tractable and that $\mathbf S_{\text{new}}$ remains twice-differentiable, we parameterise the perturbation $\bm \delta$ by a finite vector $\bm \xi$.
 The vector $\bm \xi$ is the concatenation many six-dimensional vectors $\bm \xi_i \in \mathfrak{se}(3)$, such that
 
-$ \bm \delta(t) = \sum_i^n \bm \xi_i \beta((t - i)\Delta t).
+$$
+\bm \delta(t) = \sum_i^n \bm \xi_i \beta((t - i)\Delta t).
+$$
 
 Notice that, since $\bm \delta(t)$ only applies small local perturbations, it is possible to add together the $\bm \xi_i$ treating them as vectors in $\mathbb R^6$.
 The scalar-valued function $\beta$ is a basis function with compact support, which means that it is nonzero for a finite contiguous segment of $t$ and zero everywhere else.
 A good choice is the piecewise polynomial for a cardinal cubic B-spline:
 
-$ \beta(t) = \begin{cases}
+$$
+\beta(t) = \begin{cases}
 \frac{1}{6}t^3                         & t \in [0,1]\\
 \frac{1}{6}\left(-3t^3 + 12t^2 - 12t+4 \right)& t \in [1,2]\\
 \frac{1}{6}\left(3t^3 - 24t^2 +60t-44 \right)  & t \in [2,3]\\
 \frac{1}{6}\left(-t^3 + 12t^2 -48t+64 \right)  & t \in [3,4]\\
 0 & t \notin [0,4]
 \end{cases}
+$$
 
 We can now redefine the Jacobian to be with respect to the parameters:
 
-$ \mathbf J = \left. \frac{\partial}{\partial \bm \xi} \mathbf F(\mathbf S \oplus \bm\delta) \right|_{\bm \delta = 0}.
+$$
+\mathbf J = \left. \frac{\partial}{\partial \bm \xi} \mathbf F(\mathbf S \oplus \bm\delta) \right|_{\bm \delta = 0}.
+$$
 
 Since $\beta$ is a constant,
 
-$ \frac{\partial}{\partial \bm \xi_i} = \beta((t - i)\Delta t) \frac{\partial}{\partial \bm \delta(t)}.
+$$
+\frac{\partial}{\partial \bm \xi_i} = \beta((t - i)\Delta t) \frac{\partial}{\partial \bm \delta(t)}.
+$$
 
 The elements $\bm \xi_i \in \mathfrak{se}(3)$ are known as the _spline knots_. Since each knot is a $6\times 1$ vector, the number of columns of $\mathbf J$ is $6 \times n_\text{knots}$ where $n_\text{knots}$ is the number of spline knots.
 
@@ -338,7 +414,9 @@ As you can see, the derivative of the trajectory at any point $t$ in time is a l
 
 In the next sections we will compute derivatives 
 
-$ \frac{\partial}{\partial \bm \delta(t)}
+$$
+\frac{\partial}{\partial \bm \delta(t)}
+$$
 
 knowing that each of these blocks will contribute up to four blocks, weighted with scalar weights $\beta$, to the actual Jacobian where we are optimizing the spline knots $\bm \xi$.
 
@@ -346,12 +424,14 @@ knowing that each of these blocks will contribute up to four blocks, weighted wi
 
 The function $\mathbf F$ is known as the _residual_. It consists of many constraints:
 
-$ \mathbf F = \begin{bmatrix}
+$$
+\mathbf F = \begin{bmatrix}
 \mathbf F_\text{position}\\
 \mathbf F_\text{loop}\\
 \mathbf F_\text{gravity}\\
 \vdots
 \end{bmatrix}
+$$
 
 For people familiar with the Ceres library, each constraint is a _residual block_.
 
@@ -365,7 +445,9 @@ For example, the 3D point may be the GPS position $\mathbf p(t)$ measured at tim
 
 The residual is a $3\times 1$ vector:
 
-$ \mathbf F_\text{position} = \mathbf t(\mathbf T(t)) - \mathbf p(t)
+$$
+\mathbf F_\text{position} = \mathbf t(\mathbf T(t)) - \mathbf p(t)
+$$
 
 Recall from the notation section that $\mathbf t(\mathbf T)$ is the translational component of the $SE(3)$ element $\mathbf T$.
 
@@ -373,13 +455,15 @@ Recall from the notation section that $\mathbf t(\mathbf T)$ is the translationa
 
 The left Jacobian is $3 \times 6$:
 
-$ \mathbf J_\text{left}
+$$
+\mathbf J_\text{left}
 \equiv \frac{\partial \mathbf F_\text{position}}{\partial \bm \delta}
 &=
 \frac{\partial \mathbf t(\exp(\bm \delta) \mathbf T(t))}{\partial \bm \delta}\\
 &= \begin{bmatrix}
 -[\mathbf t(\mathbf T(t))]_\times & \mathbf I_{3 \times 3}
 \end{bmatrix}
+$$
 
 The trick is to view $\mathbf t(\mathbf T) = \mathbf T \mathbf p$ where $\mathbf p = \mathbf 0$.
 Then we can apply the Jacobian for transforming a point in the derivatives table.
@@ -388,13 +472,15 @@ Then we can apply the Jacobian for transforming a point in the derivatives table
 
 The right Jacobian is $3 \times 6$:
 
-$ \mathbf J_\text{right}
+$$
+\mathbf J_\text{right}
 \equiv \frac{\partial \mathbf F_\text{position}}{\partial \bm \delta}
 &=
 \frac{\partial \mathbf t(\mathbf T(t)\exp(\bm \delta))}{\partial \bm \delta}\\
 &= \begin{bmatrix}
 \mathbf 0_{3 \times 3} & \mathbf R(\mathbf T(t))
 \end{bmatrix}
+$$
 
 ## Loop closure constraint
 
@@ -406,14 +492,17 @@ This produces a relative transformation $\mathbf A$.
 
 The residual is a $6\times 1$ vector:
 
-$ \mathbf F_\text{loop closure}
+$$
+\mathbf F_\text{loop closure}
 = \log\left(
 \underbrace{\mathbf T(t_1)^{-1} \mathbf T(t_2)}_\text{trajectory} \mathbf A
 \right)
+$$
 
 ### Left Jacobians
 
-$ \mathbf J_{\text{left}, t_1}
+$$
+\mathbf J_{\text{left}, t_1}
 &\equiv \frac{\partial \mathbf F_\text{loop closure}}{\partial \bm \delta(t_1)}\\
 &=
 \frac{\partial
@@ -450,8 +539,10 @@ $ \mathbf J_{\text{left}, t_1}
     \mathbf T(t_1)^{-1} \mathbf T(t_2) \mathbf A
 \right)
 \operatorname{Ad}(\mathbf T(t_1)^{-1})
+$$
 
-$ \mathbf J_{\text{left}, t_2}
+$$
+\mathbf J_{\text{left}, t_2}
 &\equiv \frac{\partial \mathbf F_\text{loop closure}}{\partial \bm \delta(t_2)}\\
 &=
 \frac{\partial
@@ -464,10 +555,12 @@ $ \mathbf J_{\text{left}, t_2}
     \mathbf T(t_1)^{-1} \mathbf T(t_2) \mathbf A
 \right)
 \operatorname{Ad}(\mathbf T(t_1)^{-1})
+$$
 
 ### Right Jacobians
 
-$ \mathbf J_{\text{right}, t_1}
+$$
+\mathbf J_{\text{right}, t_1}
 &\equiv \frac{\partial \mathbf F_\text{loop closure}}{\partial \bm \delta(t_1)}\\
 &=
 \frac{\partial
@@ -485,8 +578,10 @@ $ \mathbf J_{\text{right}, t_1}
 \mathbf D_\text{log}\left(
     \mathbf T(t_1)^{-1} \mathbf T(t_2) \mathbf A
 \right)
+$$
 
-$ \mathbf J_{\text{right}, t_2}
+$$
+\mathbf J_{\text{right}, t_2}
 &\equiv \frac{\partial \mathbf F_\text{loop closure}}{\partial \bm \delta(t_2)}\\
 &=
 \frac{\partial
@@ -499,6 +594,7 @@ $ \mathbf J_{\text{right}, t_2}
     \mathbf T(t_1)^{-1} \mathbf T(t_2) \mathbf A
 \right)
 \operatorname{Ad}(\mathbf T(t_1)^{-1}\mathbf T(t_2))
+$$
 
 ## Gravity constraint
 
@@ -512,21 +608,27 @@ We can also use the accelerometer reading to obtain a different $\mathbf u$ at e
 
 The residual is a $3 \times 1$ vector:
 
-$ \mathbf F_\text{gravity} = \left(\mathbf R(\mathbf T(t)) \mathbf u - \mathbf u_\text{true}\right)
+$$
+\mathbf F_\text{gravity} = \left(\mathbf R(\mathbf T(t)) \mathbf u - \mathbf u_\text{true}\right)
+$$
 
 ### Left Jacobian
 
 Since the gravity constraint only depends on rotation and not on translation, we only care about the derivative with respect to $\bm \omega(\bm \delta)$, which we hereafter write as $\bm \omega$.
 
-$ \mathbf J_\text{left} \equiv \frac{\partial \mathbf F_\text{gravity}}{\partial \bm \omega}
+$$
+\mathbf J_\text{left} \equiv \frac{\partial \mathbf F_\text{gravity}}{\partial \bm \omega}
 &=\frac{\partial \exp(\bm \omega) \mathbf R(\mathbf T(t))\mathbf u}{\partial \bm \omega}\\
 &= -[\mathbf R(\mathbf T(t)) \mathbf u]_\times
+$$
 
 ### Right Jacobian
 
-$ \mathbf J_\text{right} \equiv \frac{\partial \mathbf F_\text{gravity}}{\partial \bm \omega}
+$$
+\mathbf J_\text{right} \equiv \frac{\partial \mathbf F_\text{gravity}}{\partial \bm \omega}
 &= \frac{\partial \mathbf R(\mathbf T(t)) \exp(\bm \omega)\mathbf u}{\partial \bm \omega}\\
 &= -\mathbf R(\mathbf T(t)) [\mathbf u]_\times
+$$
 
 Recall that $\mathbf R(\mathbf T)$ is the rotational component of the pose $\mathbf T$.
 
@@ -536,30 +638,36 @@ We are aligning a "moving" or "map" point $\mathbf m$ to a "static" or "scene" p
 
 The matrix $\mathbf A$ can be used to store the uncertainty of the point $\mathbf s$, i.e. an information matrix (the inverse of a covariance matrix).
 
-* If you are registering the point to a line, you can let $\mathbf A$ be $2\times 3$. A common choice is to compute an orthonormal basis from the direction of the ray, e.g. using [Duff et al's approach](https://graphics.pixar.com/library/OrthonormalB/paper.pdf). This is commonly used in **visual odometry**.
-* If you are registering the point to a plane, you can let $\mathbf A$ be $1\times 3$.
+- If you are registering the point to a line, you can let $\mathbf A$ be $2\times 3$. A common choice is to compute an orthonormal basis from the direction of the ray, e.g. using [Duff et al's approach](https://graphics.pixar.com/library/OrthonormalB/paper.pdf). This is commonly used in **visual odometry**.
+- If you are registering the point to a plane, you can let $\mathbf A$ be $1\times 3$.
 
 ### Residual
 
 The residual is a $3\times 1$ vector:
 
-$ \mathbf F_\text{point} = \mathbf A (\mathbf T \mathbf m - \mathbf s).
+$$
+\mathbf F_\text{point} = \mathbf A (\mathbf T \mathbf m - \mathbf s).
+$$
 
 ### Left Jacobian
 
 The left Jacobian is $k\times 6$, where $\mathbf A$ is $k\times 3$.
 
-$ \mathbf J_\text{left} &= \mathbf A \begin{bmatrix}
+$$
+\mathbf J_\text{left} &= \mathbf A \begin{bmatrix}
 -[\mathbf T \mathbf m]_\times & \mathbf I
 \end{bmatrix}
+$$
 
 ### Right Jacobian
 
 The right Jacobian is $k\times 6$, where $\mathbf A$ is $k\times 3$.
 
-$ \mathbf J_\text{right} &= \mathbf A \mathbf R(\mathbf T)\begin{bmatrix}
+$$
+\mathbf J_\text{right} &= \mathbf A \mathbf R(\mathbf T)\begin{bmatrix}
 -[\mathbf m]_\times & \mathbf I
 \end{bmatrix}
+$$
 
 Recall that $\mathbf R(\mathbf T)$ is the rotational component of the pose $\mathbf T$.
 
@@ -575,11 +683,13 @@ Let $h = 1 / (t_2 - t_1)$.
 The residual is a $6\times 1$ vector.
 For concise notation let us define the $6\times 6$ matrix $\bm \Delta$ such that
 
-$ \mathbf F_\text{velocity} &= h \log\left(\bm \Delta\right) - \bm \xi_\text{velocity}\\
+$$
+\mathbf F_\text{velocity} &= h \log\left(\bm \Delta\right) - \bm \xi_\text{velocity}\\
 &= h \log\left(
     \mathbf T(t_2)
     \mathbf T(t_1)^{-1}
 \right) - \bm \xi_\text{velocity}
+$$
 
 ### Left Jacobian
 
@@ -587,7 +697,8 @@ Consider differentiating with respect to left-updates of $\mathbf T(t_1)$.
 
 The Jacobian is $6\times 6$.
 
-$ \mathbf J_\text{left}(t_1)
+$$
+\mathbf J_\text{left}(t_1)
 \equiv \frac{\partial \mathbf F_\text{velocity}}{\partial \bm \delta(t_1)}
 &= \frac{\partial}{\partial \bm \delta}
 h \log\left(
@@ -614,10 +725,12 @@ h \log\left(\exp(\bm \epsilon) \bm \Delta \right) \frac{\partial \bm \epsilon}{\
     \mathbf T(t_2)
     \mathbf T(t_1)^{-1}
 ).
+$$
 
 Now, consider differentiating with respect to left-updates to $\mathbf T(t_2)$.
 
-$ \mathbf J_\text{left}(t_2)
+$$
+\mathbf J_\text{left}(t_2)
 \equiv \frac{\partial \mathbf F_\text{velocity}}{\partial \bm \delta(t_2)}
 &= \frac{\partial}{\partial \bm \delta}
 h \log\left(
@@ -629,6 +742,7 @@ h \log\left(
     \mathbf T(t_2)
     \mathbf T(t_1)^{-1}
 ).
+$$
 
 ## Regularisation constraint
 
@@ -639,15 +753,19 @@ It seeks to dampen the problem to avoid divergent oscillations, overfitting, or 
 
 The residual is $6\times 1$:
 
-$ \mathbf F_\text{regulariser} = \bm \xi.
+$$
+\mathbf F_\text{regulariser} = \bm \xi.
+$$
 
 ### Jacobian
 
 The Jacobian is the identity:
 
-$ \mathbf J_\text{regulariser} = \mathbf I.
+$$
+\mathbf J_\text{regulariser} = \mathbf I.
+$$
 
 # References
 
-* [#jlblanco] Blanco, J.L. (2020) A tutorial on SE(3) transformation parameterizations and on-manifold optimization. [link](https://ingmec.ual.es/~jlblanco/papers/jlblanco2010geometry3D_techrep.pdf)
-* [#eade] Eade, E. (2018) Derivative of the Exponential map. [link](http://ethaneade.com/exp_diff.pdf)
+- <cite class="refname" id="jlblanco">jlblanco</cite> Blanco, J.L. (2020) A tutorial on SE(3) transformation parameterizations and on-manifold optimization. [link](https://ingmec.ual.es/~jlblanco/papers/jlblanco2010geometry3D_techrep.pdf)
+- <cite class="refname" id="eade">eade</cite> Eade, E. (2018) Derivative of the Exponential map. [link](http://ethaneade.com/exp_diff.pdf)

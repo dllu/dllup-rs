@@ -1,4 +1,5 @@
 /target
+node_modules/
 example/**/*.html
 example/**/*.xml
 img/

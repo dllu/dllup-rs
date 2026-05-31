@@ -60,6 +60,7 @@ pub struct ListItem {
 #[derive(Debug)]
 pub enum InlineElement {
     Text(String),
+    RawHtml(String),
     Code(String),
     InlineMath(String),
     Link {
@@ -68,11 +69,4 @@ pub enum InlineElement {
     },
     Emphasis(Vec<InlineElement>),
     Strong(Vec<InlineElement>),
-    #[allow(dead_code)]
-    Reference(String),
-    #[allow(dead_code)]
-    ReferenceAnchor {
-        content: String,
-        invisible: bool,
-    },
 }

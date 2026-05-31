@@ -115,7 +115,7 @@ struct RssGuid {
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 || args.len() > 3 {
-        eprintln!("Usage: dllup-rs <input.dllu|directory> [config.toml]");
+        eprintln!("Usage: dllup-rs <input.md|directory> [config.toml]");
         std::process::exit(1);
     }
 
@@ -133,7 +133,7 @@ fn main() {
     };
 
     if input_path.is_dir() {
-        let files = match collect_dllu_files(input_path) {
+        let files = match collect_source_files(input_path) {
             Ok(files) => files,
             Err(e) => {
                 eprintln!("{}", e);
@@ -142,7 +142,7 @@ fn main() {
         };
 
         if files.is_empty() {
-            eprintln!("No .dllu files found in directory {}", input_path.display());
+            eprintln!("No .md files found in directory {}", input_path.display());
             std::process::exit(1);
         }
 
@@ -171,6 +171,12 @@ fn main() {
             eprintln!("{}", e);
             std::process::exit(1);
         }
+    } else if !has_markdown_extension(input_path) {
+        eprintln!(
+            "Input file must have a .md extension: {}",
+            input_path.display()
+        );
+        std::process::exit(1);
     } else if let Err(e) = process_file(input_path, input_path.parent(), explicit_config.as_ref()) {
         eprintln!("{}", e);
         std::process::exit(1);
@@ -508,7 +514,7 @@ fn offsetdatetime_from_git_time(
     Ok(base.to_offset(offset))
 }
 
-fn collect_dllu_files(dir: &Path) -> Result<Vec<PathBuf>, String> {
+fn collect_source_files(dir: &Path) -> Result<Vec<PathBuf>, String> {
     let mut stack = vec![dir.to_path_buf()];
     let mut files = Vec::new();
 
@@ -525,13 +531,7 @@ fn collect_dllu_files(dir: &Path) -> Result<Vec<PathBuf>, String> {
 
             if file_type.is_dir() {
                 stack.push(entry_path);
-            } else if file_type.is_file()
-                && entry_path
-                    .extension()
-                    .and_then(|ext| ext.to_str())
-                    .map(|ext| ext.eq_ignore_ascii_case("dllu"))
-                    .unwrap_or(false)
-            {
+            } else if file_type.is_file() && is_source_file(&entry_path) {
                 files.push(entry_path);
             }
         }
@@ -543,6 +543,26 @@ fn collect_dllu_files(dir: &Path) -> Result<Vec<PathBuf>, String> {
         depth_b.cmp(&depth_a).then_with(|| a.cmp(b))
     });
     Ok(files)
+}
+
+fn is_source_file(path: &Path) -> bool {
+    if path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.eq_ignore_ascii_case("README.md"))
+        .unwrap_or(false)
+    {
+        return false;
+    }
+
+    has_markdown_extension(path)
+}
+
+fn has_markdown_extension(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.eq_ignore_ascii_case("md"))
+        .unwrap_or(false)
 }
 
 fn directory_has_private_marker(dir: &Path) -> bool {
@@ -765,9 +785,9 @@ fn build_blog_index(
     }))
 }
 fn find_blog_article_source(dir: &Path) -> Result<Option<PathBuf>, String> {
-    let index_candidate = dir.join("index.dllu");
-    if index_candidate.is_file() {
-        return Ok(Some(index_candidate));
+    let index_md = dir.join("index.md");
+    if index_md.is_file() {
+        return Ok(Some(index_md));
     }
 
     let mut first: Option<PathBuf> = None;
@@ -786,12 +806,7 @@ fn find_blog_article_source(dir: &Path) -> Result<Option<PathBuf>, String> {
                 )
             })?
             .is_file()
-            && entry
-                .path()
-                .extension()
-                .and_then(|ext| ext.to_str())
-                .map(|ext| ext.eq_ignore_ascii_case("dllu"))
-                .unwrap_or(false)
+            && is_source_file(&entry.path())
         {
             first = Some(entry.path());
             break;
@@ -1091,13 +1106,26 @@ fn inline_elements_to_plain_text(inlines: &[InlineElement]) -> String {
     for inline in inlines {
         match inline {
             InlineElement::Text(t) => out.push_str(t),
+            InlineElement::RawHtml(html) => out.push_str(&html_fragment_text(html)),
             InlineElement::Code(c) | InlineElement::InlineMath(c) => out.push_str(c),
             InlineElement::Link { text, .. } => out.push_str(&inline_elements_to_plain_text(text)),
             InlineElement::Emphasis(inner) | InlineElement::Strong(inner) => {
                 out.push_str(&inline_elements_to_plain_text(inner))
             }
-            InlineElement::Reference(s) => out.push_str(s),
-            InlineElement::ReferenceAnchor { content, .. } => out.push_str(content),
+        }
+    }
+    out
+}
+
+fn html_fragment_text(input: &str) -> String {
+    let mut out = String::new();
+    let mut in_tag = false;
+    for ch in input.chars() {
+        match ch {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => out.push(ch),
+            _ => {}
         }
     }
     out
@@ -1125,7 +1153,7 @@ fn collapse_whitespace(input: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::directory_or_ancestor_has_private_marker;
+    use super::{collect_source_files, directory_or_ancestor_has_private_marker};
     use std::fs;
 
     #[test]
@@ -1139,5 +1167,25 @@ mod tests {
 
         assert!(directory_or_ancestor_has_private_marker(&parent));
         assert!(directory_or_ancestor_has_private_marker(&child));
+    }
+
+    #[test]
+    fn source_discovery_includes_markdown_and_skips_readme() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        fs::write(temp.path().join("index.md"), "").expect("write index");
+        fs::write(temp.path().join("README.md"), "").expect("write readme");
+
+        let files = collect_source_files(temp.path()).expect("collect source files");
+        assert_eq!(files, vec![temp.path().join("index.md")]);
+    }
+
+    #[test]
+    fn source_discovery_ignores_dllu_files() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        fs::write(temp.path().join("index.md"), "").expect("write md");
+        fs::write(temp.path().join("index.dllu"), "").expect("write dllu");
+
+        let files = collect_source_files(temp.path()).expect("collect source files");
+        assert_eq!(files, vec![temp.path().join("index.md")]);
     }
 }

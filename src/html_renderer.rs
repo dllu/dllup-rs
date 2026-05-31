@@ -757,6 +757,7 @@ impl HtmlRenderer {
     fn render_inline(&mut self, element: &InlineElement) -> String {
         match element {
             InlineElement::Text(text) => typographer(text),
+            InlineElement::RawHtml(html) => html.clone(),
             InlineElement::Code(code) => format!("<code>{}</code>", escape_html(code)),
             InlineElement::InlineMath(math) => self.render_math_html(math, true),
             InlineElement::Link { text, url } => {
@@ -771,21 +772,6 @@ impl HtmlRenderer {
             InlineElement::Strong(content) => {
                 let inner = self.render_inlines(content);
                 format!("<strong>{}</strong>", inner)
-            }
-            InlineElement::Reference(content) => {
-                let esc = escape_html(content);
-                format!(
-                    "<a class=\"refname\" href=\"#{}\"><cite>{}</cite></a>",
-                    esc, esc
-                )
-            }
-            InlineElement::ReferenceAnchor { content, invisible } => {
-                if *invisible {
-                    String::new()
-                } else {
-                    let esc = escape_html(content);
-                    format!("<cite class=\"refname\" id=\"{}\">{}</cite>", esc, esc)
-                }
             }
         }
     }
@@ -859,14 +845,27 @@ fn extract_text(elements: &[InlineElement]) -> String {
     for el in elements {
         match el {
             InlineElement::Text(t) => out.push_str(t),
+            InlineElement::RawHtml(html) => out.push_str(&html_fragment_text(html)),
             InlineElement::Code(c) => out.push_str(c),
             InlineElement::InlineMath(m) => out.push_str(m),
             InlineElement::Link { text, .. } => out.push_str(&extract_text(text)),
             InlineElement::Emphasis(inner) | InlineElement::Strong(inner) => {
                 out.push_str(&extract_text(inner))
             }
-            InlineElement::Reference(s) => out.push_str(s),
-            InlineElement::ReferenceAnchor { content, .. } => out.push_str(content),
+        }
+    }
+    out
+}
+
+fn html_fragment_text(input: &str) -> String {
+    let mut out = String::new();
+    let mut in_tag = false;
+    for ch in input.chars() {
+        match ch {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => out.push(ch),
+            _ => {}
         }
     }
     out
@@ -1049,6 +1048,10 @@ fn needs_space_between(prev: &str, next: &str) -> bool {
     if prev.is_empty() || next.is_empty() {
         return false;
     }
+    let prev_trimmed = prev.trim_end();
+    if !prev_trimmed.ends_with("/>") && !ends_with_closing_html_tag(prev_trimmed) {
+        return false;
+    }
     let prev_last = prev
         .chars()
         .rev()
@@ -1069,6 +1072,18 @@ fn needs_space_between(prev: &str, next: &str) -> bool {
         return true;
     }
     false
+}
+
+fn ends_with_closing_html_tag(input: &str) -> bool {
+    let Some(without_gt) = input.strip_suffix('>') else {
+        return false;
+    };
+    let Some(tag_start) = without_gt.rfind("</") else {
+        return false;
+    };
+    without_gt[tag_start + 2..]
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | ':'))
 }
 
 fn typographer(input: &str) -> String {
@@ -1448,27 +1463,24 @@ mod tests {
     }
 
     #[test]
-    fn render_reference_and_anchor() {
-        use crate::parser::Parser;
-
-        let input = "Doc\n\n===\n\nThis cites (#eade).\n[#eade]\n";
-        let mut parser = Parser::default();
-        parser.parse(input);
-
-        let mut renderer = HtmlRenderer::new(&crate::config::Config::default());
-        let html = renderer.render(&parser.article);
-        assert!(html.contains("<a class=\"refname\" href=\"#eade\"><cite>eade</cite></a>"));
-        assert!(html.contains("<cite class=\"refname\" id=\"eade\">eade</cite>"));
-    }
-
-    #[test]
     fn render_numbered_headings() {
         let mut parser = crate::parser::Parser::default();
-        parser.parse("Title\n\n===\n\n# Intro\n\n## Details\n");
+        parser.parse("---\ntitle: Title\n---\n\n# Intro\n\n## Details\n");
         let mut renderer = HtmlRenderer::new(&crate::config::Config::default());
         let html = renderer.render(&parser.article);
         assert!(html.contains("<h1 id=\"s1\"><span id=\"intro\" class=\"section-anchor\" aria-hidden=\"true\"></span><a href=\"#s1\" class=\"hnum\">1</a> <span>Intro</span></h1>"));
         assert!(html.contains("<h2 id=\"s1.1\"><span id=\"details\" class=\"section-anchor\" aria-hidden=\"true\"></span><a href=\"#s1.1\" class=\"hnum\">1.1</a> <span>Details</span></h2>"));
+    }
+
+    #[test]
+    fn raw_inline_html_does_not_gain_space_after_opening_tag() {
+        let mut parser = crate::parser::Parser::default();
+        parser.parse(
+            "---\ntitle: Refs\n---\n\n- <cite class=\"refname\" id=\"eade\">eade</cite> Eade.\n",
+        );
+        let mut renderer = HtmlRenderer::new(&crate::config::Config::default());
+        let html = renderer.render(&parser.article);
+        assert!(html.contains("<cite class=\"refname\" id=\"eade\">eade</cite> Eade."));
     }
 
     #[test]
@@ -1576,7 +1588,7 @@ mod tests {
         use std::fs;
         use std::path::Path;
 
-        let fixture_path = Path::new("example/math.dllu");
+        let fixture_path = Path::new("example/blog/math/index.md");
         if !fixture_path.exists() {
             eprintln!(
                 "skipping toc test: fixture {} missing",
@@ -1619,7 +1631,7 @@ mod tests {
         cfg.images.layout_width = 800;
 
         let source = format!(
-            "Test Title\n\n===\n\npic {} : Sample caption\n\nThis is a short description.\nSecond line for flavour.\n",
+            "---\ntitle: Test Title\n---\n\n![Sample caption]({})\n\nThis is a short description.\nSecond line for flavour.\n",
             image_path.display()
         );
         let mut parser = Parser::default();
@@ -1705,7 +1717,7 @@ mod tests {
         cfg.images.layout_width = 1200;
 
         let source = format!(
-            "Sized Meta\n\n===\n\npic {} : Meta sized image\n",
+            "---\ntitle: Sized Meta\n---\n\n![Meta sized image]({})\n",
             image_path.display()
         );
         let mut parser = Parser::default();

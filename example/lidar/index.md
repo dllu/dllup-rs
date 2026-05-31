@@ -1,26 +1,27 @@
-All about automotive lidar
+---
+title: "All about automotive lidar"
+---
 
-===
 
 Here I'll provide a comprehensive overview of automotive lidar technology.
 Lidar is used for autonomous vehicles and robotics because it's a cool technology.
 
-pic https://upload.wikimedia.org/wikipedia/commons/7/75/Waymo_Jaguar_I-Pace_in_San_Francisco_2023_dllu.jpg : Waymo Jaguar I-Pace with several lidars.
+![Waymo Jaguar I-Pace with several lidars.](https://upload.wikimedia.org/wikipedia/commons/7/75/Waymo_Jaguar_I-Pace_in_San_Francisco_2023_dllu.jpg)
 
-pic https://i.dllu.net/2020-01-03-00-08-34_DSCF4187_2335e4280af0a99266cd3a4641bf5111b9ca8093_2a5d8e9b91f3f357.jpg : A Chrysler Pacifica Hybrid with 8 Ouster lidars.
+![A Chrysler Pacifica Hybrid with 8 Ouster lidars.](https://i.dllu.net/2020-01-03-00-08-34_DSCF4187_2335e4280af0a99266cd3a4641bf5111b9ca8093_2a5d8e9b91f3f357.jpg)
 
 # What lidar does
 
 A lidar is a sensor which measures things by bouncing light off an object.
 These things include:
 
-* distance, by measuring how much time it takes for light to bounce back
-* bearing, by shining the light or pointing the detector in a particular direction
-* reflectivity, by measuring how much light has bounced back
-* speed, by measuring the Doppler shift in the reflected light.
-* ambient, by measuring the amount of light in the environment in a particular direction
+- distance, by measuring how much time it takes for light to bounce back
+- bearing, by shining the light or pointing the detector in a particular direction
+- reflectivity, by measuring how much light has bounced back
+- speed, by measuring the Doppler shift in the reflected light.
+- ambient, by measuring the amount of light in the environment in a particular direction
 
-pic os1-64-ambient-2.png : Ambient, intensity, and range channels of a really old Ouster OS1-64.
+![Ambient, intensity, and range channels of a really old Ouster OS1-64.](os1-64-ambient-2.png)
 
 In general, we are most interested in the first two: **distance** and **bearing**.
 The other ones are very nice to have as well, particularly surface reflectivity, which allows detection of lanes on the ground for example.
@@ -32,16 +33,18 @@ This allows it to know exactly where it is, where obstacles are, and how to plan
 
 Distance and bearing measurements can be converted into 3D Cartesian points. For example, given range $r$ and bearing $\theta$, $\phi$, the 3D point is:
 
-$ \mathbf{p} = \begin{bmatrix}x\\y\\z\end{bmatrix} = \begin{bmatrix}
+$$
+\mathbf{p} = \begin{bmatrix}x\\y\\z\end{bmatrix} = \begin{bmatrix}
 r \sin\theta \cos\phi\\
 r \sin\theta \sin\phi\\
 r \cos\theta
 \end{bmatrix}
+$$
 
 In contrast, a camera only measures bearing and ambient light intensity. Each pixel of a photo is a measurement of how much light there is in that particular direction.
 But generally, a camera has much higher bearing resolution than a lidar.
 
-pic https://upload.wikimedia.org/wikipedia/commons/b/bd/Ouster_OS1-64_lidar_point_cloud_of_intersection_of_Folsom_and_Dore_St%2C_San_Francisco.png : A point cloud accumulated from an OUster OS1-64 lidar.
+![A point cloud accumulated from an OUster OS1-64 lidar.](https://upload.wikimedia.org/wikipedia/commons/b/bd/Ouster_OS1-64_lidar_point_cloud_of_intersection_of_Folsom_and_Dore_St%2C_San_Francisco.png)
 
 # Measuring distance
 
@@ -49,20 +52,22 @@ Measuring distance is also known as _ranging_.
 Basically, it just measures how close something is.
 There are in general two ways of doing this:
 
-* Measuring the time somehow, exploiting the fact that light travels at a constant speed (the speed of light)
-* Parallax
+- Measuring the time somehow, exploiting the fact that light travels at a constant speed (the speed of light)
+- Parallax
 
 For measuring the time, there are again two ways:
 
-* Direct time of flight, where we directly measure the time
-* Modulated lidar, where we modulate some attribute of the outgoing light, e.g. amplitude, frequency, or polarization
+- Direct time of flight, where we directly measure the time
+- Modulated lidar, where we modulate some attribute of the outgoing light, e.g. amplitude, frequency, or polarization
 
 ## Direct time of flight pulsed lidar
 
 Direct detection pulsed lidar fires one or more laser pulses.
 Then, we simply measure the time to see the reflection from the pulse.
 
-$ d = \frac{ct}{2}
+$$
+d = \frac{ct}{2}
+$$
 
 where $c$ is the speed of light ($3\times 10^8$ m/s). The division by 2 is because the range is half of the round trip distance.
 
@@ -76,7 +81,7 @@ Typically ranging accuracy at the centimeter level is possible.
 
 After getting the time series data, the peaks in the series are found, and these correspond to the range.
 
-pic ambient_channel_outlines.svg : A simplified time series plot of number of photons vs time.
+![A simplified time series plot of number of photons vs time.](ambient_channel_outlines.svg)
 
 Usually, it is better to have stronger, shorter pulses.
 Diode lasers can produce pulses on the order of a couple of nanoseconds, and fiber lasers can produce even shorter pulses with much higher peak energy.
@@ -92,8 +97,8 @@ One strategy to overcome this is to try correlating it with a bunch of different
 In order to get a time series of the amount of light per unit time at a super high rate, we need a really fast sensor that can operate at 1 GHz.
 Usually one of these two types of sensors is used:
 
-* Linear-mode avalanche photodiodes (APD)
-* Geiger-mode avalanche photodiodes, also known as single-photon avalanche photodiodes (SPAD)
+- Linear-mode avalanche photodiodes (APD)
+- Geiger-mode avalanche photodiodes, also known as single-photon avalanche photodiodes (SPAD)
 
 Other types of sensors such as CCD sensors are not fast enough for this application.
 
@@ -117,7 +122,7 @@ Hence, it is a very sensitive way of measuring light intensity.
 Geiger-mode avalanche photodiodes (GMAPDs) or single-photon avalanche diodes (SPADs) have such a strong reverse bias that even getting hit by a single photon can make them break down, resulting in a large current spike.
 The output of a SPAD can be directly connected to a voltage discriminator so that the spike becomes a digital signal from logic 0 to 1.
 
-pic https://i.dllu.net/2025-08-25-19-38-30_ed8ec17d867bc8b1.png : I-V diagram of avalanche photodiodes
+![I-V diagram of avalanche photodiodes](https://i.dllu.net/2025-08-25-19-38-30_ed8ec17d867bc8b1.png)
 
 In the above I-V diagram, we see the relationship between the voltage (V) and the current (I).
 The breakdown voltage $V_{BD}$ is labelled.
@@ -128,29 +133,29 @@ The Geiger-mode APD operates where the slope is effectively infinitely steep.
 
 SPADs have the following advantages:
 
-* **CMOS compatibility**:
-Silicon SPADs can be made with the [complementary metal-oxide-semiconductor (CMOS)](https://en.wikipedia.org/wiki/CMOS) process, the same way as computer CPUs and the such.
-Since they output digital signals, you can fabricate them on the same chip that is used to process the signals.
-Hence the whole detection pipeline can be made cheaply on a silicon application-specific integrated circuit (ASIC).
-In contrast, the output of an APD is an analog signal, so a high-speed analog-to-digital converter (ADC) is required.
-This is very expensive and introduces extra noise.
-Silicon SPADs also benefit from the immense scaling potentials of the CMOS process, allowing very large arrays to be fabricated at a very fine manufacturing node.
-Hence, SPADs can be used to make very high resolution, dense arrays, as opposed to APDs which are are relatively large and expensive discrete components.
-* **Higher gain**: SPADs have a higher gain than linear mode APDs.
-In fact, the gain of a SPAD is essentially infinite, allowing it to detect even a single photon.
-* **Lower temperature dependence**: SPADs are less sensitive to temperature than APDs, for which different temperatures can change the sensitivity of the sensor and also affect the dark current.
-* **Better timing jitter**: SPADs output such a sharp spike that you can measure the timing very accurately and reliably.
+- **CMOS compatibility**:
+  Silicon SPADs can be made with the [complementary metal-oxide-semiconductor (CMOS)](https://en.wikipedia.org/wiki/CMOS) process, the same way as computer CPUs and the such.
+  Since they output digital signals, you can fabricate them on the same chip that is used to process the signals.
+  Hence the whole detection pipeline can be made cheaply on a silicon application-specific integrated circuit (ASIC).
+  In contrast, the output of an APD is an analog signal, so a high-speed analog-to-digital converter (ADC) is required.
+  This is very expensive and introduces extra noise.
+  Silicon SPADs also benefit from the immense scaling potentials of the CMOS process, allowing very large arrays to be fabricated at a very fine manufacturing node.
+  Hence, SPADs can be used to make very high resolution, dense arrays, as opposed to APDs which are are relatively large and expensive discrete components.
+- **Higher gain**: SPADs have a higher gain than linear mode APDs.
+  In fact, the gain of a SPAD is essentially infinite, allowing it to detect even a single photon.
+- **Lower temperature dependence**: SPADs are less sensitive to temperature than APDs, for which different temperatures can change the sensitivity of the sensor and also affect the dark current.
+- **Better timing jitter**: SPADs output such a sharp spike that you can measure the timing very accurately and reliably.
 
 Meanwhile, APDs have these advantages:
 
-* **No dead time and quenching**: A linear mode APD essentially continually outputs an analog signal, so there is no need to recharge. In contrast, after a SPAD fires, it takes a while to recharge.
-During a SPAD avalanche event, it can be destroyed by its own huge current, so the current must be quenched with a resistor to discharge it.
-After quenching, it needs to recover to its original biasing condition.
-The reverse bias voltage is typically supplied by a capacitor, which needs to take time to charge back up again.
-Hence, there is a dead time ranging from around a few nanoseconds (silicon SPADs) to a microsecond (GMAPDs).
-By avoiding all this, APDs can have simpler circuitry.
-* **Dynamic range per detector**: APDs output a continuous analog output that you can digitize however finely you want, gives better dynamic range per detector (meanwhile a single SPAD has a dynamic range of only 1 bit, it's either 0 or 1).
-* **No range walk**: Linear mode APDs avoid intensity-dependent range walk and saturation issues, which I discuss in more detail below.
+- **No dead time and quenching**: A linear mode APD essentially continually outputs an analog signal, so there is no need to recharge. In contrast, after a SPAD fires, it takes a while to recharge.
+  During a SPAD avalanche event, it can be destroyed by its own huge current, so the current must be quenched with a resistor to discharge it.
+  After quenching, it needs to recover to its original biasing condition.
+  The reverse bias voltage is typically supplied by a capacitor, which needs to take time to charge back up again.
+  Hence, there is a dead time ranging from around a few nanoseconds (silicon SPADs) to a microsecond (GMAPDs).
+  By avoiding all this, APDs can have simpler circuitry.
+- **Dynamic range per detector**: APDs output a continuous analog output that you can digitize however finely you want, gives better dynamic range per detector (meanwhile a single SPAD has a dynamic range of only 1 bit, it's either 0 or 1).
+- **No range walk**: Linear mode APDs avoid intensity-dependent range walk and saturation issues, which I discuss in more detail below.
 
 If the return signal from a pulse is very strong, a SPAD array can be saturated at the very beginning of the pulse.
 If the pulse length is long, ranging may be biased when measuring the range of retroreflective materials.
@@ -163,21 +168,21 @@ In contrast, the continuous signal from an APD can be digitized with many bits.
 
 To prevent SPADs from being drowned out by ambient light, the probability of detection of any single SPAD must be kept very low. Some techniques include:
 
-* SPADs are usually made really small
-* a tight band-pass filter can reject most ambient light
-* sometimes an attenuating filter (e.g. a neutral density filter, which attenuates all wavelengths equally) is needed to attenuate the signal even further
+- SPADs are usually made really small
+- a tight band-pass filter can reject most ambient light
+- sometimes an attenuating filter (e.g. a neutral density filter, which attenuates all wavelengths equally) is needed to attenuate the signal even further
 
 ### SPAD macropixels
 
-pic imx479.jpg : The [Sony IMX479](https://www.sony-semicon.com/en/news/2025/2025061001.html) SPAD sensor is physically a 105×1,568 pixel array, with a total of approximately 164,000 pixels, but it combines many pixels into macropixels, so the final output is only 520 macropixels. This allows it to have amazing dynamic range and produce this beautiful image. Note that the lower image is the raw ambient image output from the lidar rather than a separate photo taken by a camera.
+![The [Sony IMX479](https://www.sony-semicon.com/en/news/2025/2025061001.html) SPAD sensor is physically a 105×1,568 pixel array, with a total of approximately 164,000 pixels, but it combines many pixels into macropixels, so the final output is only 520 macropixels. This allows it to have amazing dynamic range and produce this beautiful image. Note that the lower image is the raw ambient image output from the lidar rather than a separate photo taken by a camera.](imx479.jpg)
 
 Instead of a single SPAD per pixel, several SPADs can be combined into a single "macropixel".
 This trade-off results in lower spatial resolution, but the benefit is that it mitigates most of the drawbacks of SPADs.
 
-* Dynamic range increases from 1 bit to as many bits as you have SPADs in the macropixel.
-* Dead time of any individual SPAD is mitigated since it is unlikely that all the SPADs will fire at once, meaning that there are always available ones.
-Of course, in some circumstances (such as retroreflectors) it is still possible for all the SPADs in a macropixel to be saturated.
-* SPADs can be made individually smaller, making it unlikely for all of them to fire at once, resulting in better resilience against saturation.
+- Dynamic range increases from 1 bit to as many bits as you have SPADs in the macropixel.
+- Dead time of any individual SPAD is mitigated since it is unlikely that all the SPADs will fire at once, meaning that there are always available ones.
+  Of course, in some circumstances (such as retroreflectors) it is still possible for all the SPADs in a macropixel to be saturated.
+- SPADs can be made individually smaller, making it unlikely for all of them to fire at once, resulting in better resilience against saturation.
 
 ### Multi-shot ranging
 
@@ -193,9 +198,9 @@ The tradeoff is that it takes a longer time to make a measurement, during which 
 Silicon photomultipliers are a group of SPADs whose outputs are combined into a single analog signal.
 This has some advantages:
 
-* Just like the SPAD macropixel, by combining many SPADs, the dead time of any individual SPAD is a less big concern.
-* It can be more sensitive than regular linear mode APDs.
-* Without the need for digital logic, the chip is simpler and possibly denser than a digital SPAD macropixel.
+- Just like the SPAD macropixel, by combining many SPADs, the dead time of any individual SPAD is a less big concern.
+- It can be more sensitive than regular linear mode APDs.
+- Without the need for digital logic, the chip is simpler and possibly denser than a digital SPAD macropixel.
 
 However, an ADC is still required to digitize the signal.
 
@@ -232,12 +237,14 @@ Then, you can combine the part that didn't go out with the part that bounced bac
 When you combine two waves of similar but slightly different frequency, you'll end up with something called **beat**. When the waves line up, they will double their strength, and when they are out of phase, they cancel each other out.
 Then, you can use a photodiode to measure the time series of the combined wave in order to determine the beat frequency, which in turn tells you the range.
 
-$ \cos(2\pi f_1t)+\cos(2\pi f_2t) = 2 \underbrace{\cos\left(2\pi\frac{f_1+f_2}{2}t\right)}_\text{carrier} \underbrace{\cos\left(2\pi\frac{f_1-f_2}{2}t\right)}_\text{envelope}
+$$
+\cos(2\pi f_1t)+\cos(2\pi f_2t) = 2 \underbrace{\cos\left(2\pi\frac{f_1+f_2}{2}t\right)}_\text{carrier} \underbrace{\cos\left(2\pi\frac{f_1-f_2}{2}t\right)}_\text{envelope}
+$$
 
 Here's a plot that shows this effect.
 The main thing is that the beat frequency is proportional to the _difference_ in frequency, so you can measure it relatively easily with a photodiode.
 
-pic https://upload.wikimedia.org/wikipedia/commons/2/2e/Beating_Frequency.svg beat : When combining two frequencies, you get a wave of the sum of the two frequencies multiplied by the difference of the two frequencies. Source: [Ansgar Hellwig on Wikimedia Commons](https://en.wikipedia.org/wiki/File:Beating_Frequency.svg)
+![When combining two frequencies, you get a wave of the sum of the two frequencies multiplied by the difference of the two frequencies. Source: [Ansgar Hellwig on Wikimedia Commons](https://en.wikipedia.org/wiki/File:Beating_Frequency.svg)](https://upload.wikimedia.org/wikipedia/commons/2/2e/Beating_Frequency.svg)
 
 Frequency modulated lidar is known as **frequency modulated continuous wave** (FMCW) since the laser beam is always on (a continuous wave) that doesn't turn off.
 The principle of using the beat to determine the range is known as [**optical heterodyne detection**](https://en.wikipedia.org/wiki/Optical_heterodyne_detection).
@@ -255,7 +262,7 @@ This does not use any timing information at all.
 A linear photodetector is placed physically offset from the laser.
 The detector measures the incident angle of the reflected light and obtains the range by triangulation.
 
-pic https://i.dllu.net/2025-08-25-20-48-01_5d96f7256b0cfd19.png : Parallax rangefinding, figure from "Low cost laser distance sensor" by K. Konolige _et al_.
+![Parallax rangefinding, figure from "Low cost laser distance sensor" by K. Konolige _et al_.](https://i.dllu.net/2025-08-25-20-48-01_5d96f7256b0cfd19.png)
 
 This is rarely or never used in automotive applications but is instead found in robotic vacuum cleaners and other low-speed, low-cost applications.
 A famous example is the ["Low cost laser distance sensor"](https://www.robotpark.com/image/data/PRO/91353/revolds-whitepaper.pdf) by Kurt Konolige _et al_.
@@ -275,9 +282,9 @@ As mentioned in our introduction, lidar sensors combine distance readings with b
 
 Lidars can either:
 
-* discern bearing for both tx (the outgoing laser beam) and rx (the detector), or
-* discern bearing only for rx but not tx (i.e. a flash lidar), or
-* discern bearing only for tx but not rx (for example, some optical phased array lidars only steer the laser beam, but have a "staring" detector that doesn't distinguish angle).
+- discern bearing for both tx (the outgoing laser beam) and rx (the detector), or
+- discern bearing only for rx but not tx (i.e. a flash lidar), or
+- discern bearing only for tx but not rx (for example, some optical phased array lidars only steer the laser beam, but have a "staring" detector that doesn't distinguish angle).
 
 Discerning bearing is also known as "imaging". People may describe a system as having both imaged rx and tx, for example.
 
@@ -285,10 +292,10 @@ Generally, having imaged rx and tx is vastly better, since you are only pointing
 
 There are two main approaches for discerning bearing:
 
-* an **array** of elements already pointing in different directions
-* **beam steering**, by pointing either your detector or laser in various directions
+- an **array** of elements already pointing in different directions
+- **beam steering**, by pointing either your detector or laser in various directions
 
-pic array_vs_steering.svg : Animation showing arrays vs steering
+![Animation showing arrays vs steering](array_vs_steering.svg)
 
 As with the methods for measuring distance, each method has advantages and disadvantages.
 
@@ -306,18 +313,20 @@ The simplest way to determine direction is to just have an array of elements poi
 
 Basically, you'll need cheap and small array elements in order to have an array.
 
-| Laser type | Performance | Cost | Array? | 
-|-
+| Laser type | Performance | Cost | Array? |
+| --- | --- | --- | --- |
 | VCSEL | Low | Low | Solid state 2D arrays of hundreds of lasers are possible |
 | Edge-emitting diodes | Mid | Mid | Discrete 1D arrays of dozens of lasers are typical |
 | Fiber | High | High | No, typically used as single laser + beam steering |
-Comparison of lasers
+
+Table: Comparison of lasers
 
 | Sensor type | Size | Cost | Array? |
-|-
+| --- | --- | --- | --- |
 | SPAD | Small | Low | Solid state 2D arrays of even millions of SPADs are possible |
 | APD | Mid | Mid | Discrete 1D arrays of dozens of APDs are typical |
-Comparison of receivers
+
+Table: Comparison of receivers
 
 ### Discrete arrays
 
@@ -325,28 +334,28 @@ With discrete arrays, you have discrete components like edge-emitting laser diod
 Some early lidars, like the Velodyne VLP 16, literally have 16 circuit boards, each with one laser diode on them, and another 16 circuit boards, each with one APD on them.
 Then, these 32 circuit boards are glued into place.
 
-pic vlp16-inside.jpg VLP 16 : The inside of the Velodyne VLP 16. Source: [xtech](https://xtech.nikkei.com/atcl/nxt/column/18/00009/00066/) 
+![The inside of the Velodyne VLP 16. Source: [xtech](https://xtech.nikkei.com/atcl/nxt/column/18/00009/00066/)](vlp16-inside.jpg)
 
-pic vlp16-pcbs.jpg VLP 16 PCBs : Detail of the array of 16 PCBs in the Velodyne VLP 16. Source: [xtech](https://xtech.nikkei.com/atcl/nxt/column/18/00009/00066/)
+![Detail of the array of 16 PCBs in the Velodyne VLP 16. Source: [xtech](https://xtech.nikkei.com/atcl/nxt/column/18/00009/00066/)](vlp16-pcbs.jpg)
 
 The reason for doing that is because, due to the simple design of the lens, it was necessary to arrange the lasers and detectors along a curved arc.
 Interestingly, a Google (now Waymo) patent [US8836922B1](https://patents.google.com/patent/US8836922B1/en) describes using a flexible substrate to achieve the curve.
 
-pic https://i.dllu.net/2025-08-26-14-02-00_94432ea3e8916ca0.png : Curved detector array in the receive block in [US8836922B1](https://patents.google.com/patent/US8836922B1/en).
+![Curved detector array in the receive block in [US8836922B1](https://patents.google.com/patent/US8836922B1/en).](https://i.dllu.net/2025-08-26-14-02-00_94432ea3e8916ca0.png)
 
 ### Solid state arrays
 
 Solid state arrays put lasers or detectors on a single chip. The obvious benefit is vastly simpler manufacturing and consistency.
 High performance edge-emitting laser diodes shoot lasers to the sides so you can't just put a bunch of them in an array on a chip, so you'll have to make do with lower power VCSELs.
 
-pic ousterl3.png Ouster L3 chip : The Ouster L3 chip, a SPAD array. Each square is a macropixel with many SPADs. Source: [Ouster blog post](https://ouster.com/insights/blog/digital-lidar-realizing-the-power-of-moores-law)
+![The Ouster L3 chip, a SPAD array. Each square is a macropixel with many SPADs. Source: [Ouster blog post](https://ouster.com/insights/blog/digital-lidar-realizing-the-power-of-moores-law)](ousterl3.png)
 
-pic https://i.dllu.net/2025-08-28-19-21-16_f94385e7f0ca177f.png : Instead of 32 circuit boards, there are just two in this Ouster lidar: one containing the chip full of lasers, and one containing the chip full of detectors. Source: [How Ouster Digital Lidar Works](https://www.youtube.com/watch?v=fFEmWubsE8U)
+![Instead of 32 circuit boards, there are just two in this Ouster lidar: one containing the chip full of lasers, and one containing the chip full of detectors. Source: [How Ouster Digital Lidar Works](https://www.youtube.com/watch?v=fFEmWubsE8U)](https://i.dllu.net/2025-08-28-19-21-16_f94385e7f0ca177f.png)
 
 Since the laser array or detector array is now flat, the optical design will be somewhat more complex.
 You'll need the lens to be [image space telecentric](https://en.wikipedia.org/wiki/Telecentric_lens) since your flat array of lasers all produces parallel beams.
 
-pic https://i.dllu.net/2025-08-28-19-20-44_d2b0677b8cb4ceff.png : Ouster lidars have relatively complex multi-element lenses compared to single-element lenses on early Velodyne lidars. Source: [How Ouster Digital Lidar Works](https://www.youtube.com/watch?v=fFEmWubsE8U)
+![Ouster lidars have relatively complex multi-element lenses compared to single-element lenses on early Velodyne lidars. Source: [How Ouster Digital Lidar Works](https://www.youtube.com/watch?v=fFEmWubsE8U)](https://i.dllu.net/2025-08-28-19-20-44_d2b0677b8cb4ceff.png)
 
 For lasers, only VCSELs are compatible with this method.
 As for detectors, SPADs are also vastly more amenable to solid state arrays, although APD arrays are also available (but with fewer elements).
@@ -366,23 +375,23 @@ The first advantage is that this gives you a 360 degree field of view.
 This also has the advantage of being highly compatible with arrays, so you can have a vertical array while spinning horizontally.
 Spinning lidars have basically only one moving part.
 
-pic https://i.dllu.net/lidars_2_8da8ee276729bd1a.png : Size comparison between some spinning lidars.
+![Size comparison between some spinning lidars.](https://i.dllu.net/lidars_2_8da8ee276729bd1a.png)
 
 An encoder is used to measure the angle of the turret.
 
 The challenges of spinning are that:
 
-* You need to send power and data between the spinning turret and the stationary base somehow. The earliest spinning multi-beam lidar, the Velodyne HDL-64E, used a mercury-wetted slip ring (Mercotac 305). This is very efficient, but expensive, fragile, and somewhat environmentally unfriendly. Later spinning lidars transmit power wirelessly through a transformer, and data wirelessly through an optical link.
-* The cylindrical window can degrade optical performance. Some lidars have compensator optics to suppress aberrations from the cylindrical window. The Quanergy M8 had a variant with an octagonal window instead. Some lidars spin externally (such as the Waymo Laser Bear Honeycomb, Velodyne HDL-64E, and Velodyne HDL 32). But spinning externally makes it less robust against the environment.
-* Thermal dissipation. The spinning turret houses most of the energy-intensive lasers but it has no direct contact with the outside except through the bearing.
-* Despite having only one moving part, the spinning turret is a rather large and heavy part, and some early spinning lidars like Velodynes tended to fail a lot when the bearing was damaged or wore out. This is an especially big problem if the turret isn't well-balanced.
+- You need to send power and data between the spinning turret and the stationary base somehow. The earliest spinning multi-beam lidar, the Velodyne HDL-64E, used a mercury-wetted slip ring (Mercotac 305). This is very efficient, but expensive, fragile, and somewhat environmentally unfriendly. Later spinning lidars transmit power wirelessly through a transformer, and data wirelessly through an optical link.
+- The cylindrical window can degrade optical performance. Some lidars have compensator optics to suppress aberrations from the cylindrical window. The Quanergy M8 had a variant with an octagonal window instead. Some lidars spin externally (such as the Waymo Laser Bear Honeycomb, Velodyne HDL-64E, and Velodyne HDL 32). But spinning externally makes it less robust against the environment.
+- Thermal dissipation. The spinning turret houses most of the energy-intensive lasers but it has no direct contact with the outside except through the bearing.
+- Despite having only one moving part, the spinning turret is a rather large and heavy part, and some early spinning lidars like Velodynes tended to fail a lot when the bearing was damaged or wore out. This is an especially big problem if the turret isn't well-balanced.
 
 ### Spinning mirror
 
 Using a spinning polygonal mirror is one of the oldest and most reliable ways to scan a laser beam, which is again a 1D scanning method.
 This is used in, for example, laser printers.
 
-pic hex_scanner.svg Hexagonal mirror : Animation of a laser beam being reflected by a rotating hexagonal mirror.
+![Animation of a laser beam being reflected by a rotating hexagonal mirror.](hex_scanner.svg)
 
 As with spinning lidars, an encoder is used to measure the angle of the polygonal mirror.
 
@@ -393,7 +402,7 @@ However, it has the advantage of having a lighter moving part without having to 
 
 This is a flat mirror that oscillates in angle to steer the beam, which can be either 1D or 2D.
 
-pic flat_mirror_scanner.svg Oscillating mirror : Animation of a laser beam being reflected by an oscillating mirror.
+![Animation of a laser beam being reflected by an oscillating mirror.](flat_mirror_scanner.svg)
 
 Typically, a lightweight mirror is connected to a galvanometer in what's called a [mirror galvanometer](https://en.wikipedia.org/wiki/Mirror_galvanometer) (galvo).
 A galvanometer is one of the most basic ways to measure electrical current: it consists of a spring, a magnet, and a solenoid.
@@ -417,14 +426,14 @@ After all, the rate at which your moving part wears out is strongly dependent on
 
 There are, however, a couple of drawbacks:
 
-* The optical aperture may be limited by the tiny size of the mirror. With lasers, the bigger the aperture, the more it stays collimated (and hence the less it spreads out), so you want the aperture to be as large as possible usually.
-* Cooling a tiny mirror may be hard. Your entire laser output is bouncing off a tiny surface with tiny thermal pathways. Hence, the mirror should be kept as reflective as possible.
+- The optical aperture may be limited by the tiny size of the mirror. With lasers, the bigger the aperture, the more it stays collimated (and hence the less it spreads out), so you want the aperture to be as large as possible usually.
+- Cooling a tiny mirror may be hard. Your entire laser output is bouncing off a tiny surface with tiny thermal pathways. Hence, the mirror should be kept as reflective as possible.
 
 ### Optical phased arrays
 
 A [phased array](https://en.wikipedia.org/wiki/Phased_array) has many array elements whose phase is slightly offset. As the contributions from each element interfere, a beam is formed where they interfere constructively, and everywhere else, destructive interference causes it to cancel out.
 
-pic https://upload.wikimedia.org/wikipedia/commons/4/4a/Phased_array_animation_with_arrow_10frames_371x400px_100ms.gif Phased array : Phased array animation. Source: [Chetvorno on Wikimedia Commons](https://en.wikipedia.org/wiki/File:Phased_array_animation_with_arrow_10frames_371x400px_100ms.gif).
+![Phased array animation. Source: [Chetvorno on Wikimedia Commons](https://en.wikipedia.org/wiki/File:Phased_array_animation_with_arrow_10frames_371x400px_100ms.gif).](https://upload.wikimedia.org/wikipedia/commons/4/4a/Phased_array_animation_with_arrow_10frames_371x400px_100ms.gif)
 
 Phased arrays are common in radar. However, the fundamental physical problem of phased arrays is that the element size must be close to the size of the wavelength, and the wavelength of light (about a micron) is way smaller than the wavelength of radio waves (ranging from millimeters to many meters).
 If your array spacing is too big, your beam would have very poor collimation and tons of side lobes.
@@ -441,7 +450,7 @@ Prisms have dispersion, which means that the index of refraction changes with wa
 This allows it to scan in 1D.
 Baraja uses a MEMS mirror for the other axis.
 
-pic https://i.dllu.net/2020-01-09-11-44-04_DSCF4282_a2f1eb656caea1b95a9ee0283b0a3ecfa041faba_23b4512de55342b5.jpg : Baraja lidar.
+![Baraja lidar.](https://i.dllu.net/2020-01-09-11-44-04_DSCF4282_a2f1eb656caea1b95a9ee0283b0a3ecfa041faba_23b4512de55342b5.jpg)
 
 This requires using a high quality fiber laser or tunable diodes that can do large frequency sweeps, which can be costly.
 
@@ -452,18 +461,19 @@ A prism is a triangular piece of glass that can bend light.
 When the prisms are lined up, they both bend light the same way, and the beam gets bent a lot.
 When they are opposite of each other, they cancel each other out, and the beam goes through straight without bending.
 
-pic risley_prism_animation.gif : Animation of how Risley prisms work.
+![Animation of how Risley prisms work.](risley_prism_animation.gif)
 
-pic risley2.svg Risley prism : Simplified diagram showing how Risley prisms work.
+![Simplified diagram showing how Risley prisms work.](risley2.svg)
 
 Basically, when you have two prisms, one with angle $\theta$ and one with angle $\omega \theta$, the $x, y$ direction of the beam is proportional to:
 
-$ x &= \sin\theta + \sin\omega\theta\\
+$$
+x &= \sin\theta + \sin\omega\theta\\
   y &= \cos\theta + \cos\omega\theta
+$$
 
 which results in this scan pattern if the two prisms are going at constant speeds with a fixed speed ratio $\omega$:
 
-???
 <div>
 <canvas id="risley-canvas" width="600" height="600" style="margin: 0 auto; max-width: 600px"></canvas>
 <p>Speed ratio between prisms: <span id="risley-omega">-0.743</span></p>
@@ -514,12 +524,11 @@ document.getElementById('risley-input').oninput = function(e) {
     reset_risley();
 }
 </script>
-???
 
 The Livox lidars are notable for using Risley prisms.
 You can make other scan patterns by varying the speed of the prisms, and by putting an array of multiple lasers (e.g. the Livox Horizon's 6 lasers) instead of one laser.
 
-pic livox-mid70.png : Livox Mid-70. Source: [Livox website](https://www.livoxtech.com/mid-70).
+![Livox Mid-70. Source: [Livox website](https://www.livoxtech.com/mid-70).](livox-mid70.png)
 
 The advantage of Risley prisms is that, like polygonal mirrors, it's cheap and robust to have things spinning at a constant speed.
 However, the disadvantage is very narrow field of view, and a weird scanning pattern.
@@ -529,17 +538,17 @@ For some applications, the scan pattern can be an advantage, for example surveyi
 
 Many lidars combine two 1D methods, e.g.:
 
-* Horizontally spinning turret + vertical array (e.g. Velodyne pucks, Ouster OS series, Hesai Pandar)
-* Horizontally spinning turret + vertically spinning polygonal mirror (e.g. Leica BLK360)
-* Horizontal spinning mirror + vertical spinning or oscillating mirror (e.g. Luminar Iris, Seyond Falcon)
-* Horizontal spinning mirror + array (e.g. Hesai AT512)
+- Horizontally spinning turret + vertical array (e.g. Velodyne pucks, Ouster OS series, Hesai Pandar)
+- Horizontally spinning turret + vertically spinning polygonal mirror (e.g. Leica BLK360)
+- Horizontal spinning mirror + vertical spinning or oscillating mirror (e.g. Luminar Iris, Seyond Falcon)
+- Horizontal spinning mirror + array (e.g. Hesai AT512)
 
 # Choice of wavelength and eye safety
 
 For lidars, two choices of wavelength are popular:
 
-* near infrared, e.g. 850 nm, 865 nm, 905 nm, 940 nm
-* 1550 nm
+- near infrared, e.g. 850 nm, 865 nm, 905 nm, 940 nm
+- 1550 nm
 
 The main advantage of near IR is that silicon is sensitive in that region, allowing much cheaper, more sensitive silicon detectors, as well as cheap laser sources.
 In contrast, with 1550 nm, you would need InGaAs semiconductors for your detectors, which are less sensitive and very expensive.
@@ -547,7 +556,7 @@ In contrast, with 1550 nm, you would need InGaAs semiconductors for your detecto
 Meanwhile, the main advantage of 1550 nm is that eye safety regulations allow devices to output vastly more power at 1550 nm than in the near IR regime.
 As a result, 1550 nm lidars tend to have longer range in general.
 
-pic https://upload.wikimedia.org/wikipedia/commons/4/43/IEC60825_MPE_J_nm.png MPE : Maximum permissible exposure according to IEC60825. Source: [Hankwang from English Wikipedia](https://en.wikipedia.org/wiki/File:IEC60825_MPE_J_nm.png)
+![Maximum permissible exposure according to IEC60825. Source: [Hankwang from English Wikipedia](https://en.wikipedia.org/wiki/File:IEC60825_MPE_J_nm.png)](https://upload.wikimedia.org/wikipedia/commons/4/43/IEC60825_MPE_J_nm.png)
 
 You can see in the above chart that you are allowed to output hundreds of times more power in the steady state scenario (red curve) at 1550 nm compared to, say, 905 nm. The reason is that the human eyeball focuses near IR light to small spots on the retina, so intense light may damage the retina. On the other hand, 1550 nm light is not focused and is attenuated by water, but at high enough intensities, it will damage the cornea instead.
 
@@ -556,9 +565,9 @@ That is to say, 1550 nm lidars do in fact output up to 1,000,000 times more puls
 
 Paradoxically, 1550 nm lidars may be more dangerous overall, because of the following reasons:
 
-* If you have many lidars around, the beams from each 905 nm lidar will be focused to a different spot on your retina, and you are no worse off than if there was a single lidar. But if there are many 1550 nm lidars around, their beams will have a cumulative effect at heating up your cornea, potentially exceeding the safety threshold.
-* 1550 nm lidars more often rely on beam steering since it is impractical to have an array of expensive fiber lasers. However, if the beam steering were to fail, the laser beam may be fixed in one direction. This can cause laser energy levels thousands of times stronger than the safety threshold in a particular direction, even when the lidar would be under the threshold when it's scanning properly.
-* 1550 nm lidars are known to damage cameras. For example, both [AEye lidars](https://arstechnica.com/cars/2019/01/man-says-ces-lidars-laser-was-so-powerful-it-wrecked-his-1998-camera/) and [Luminar lidars on the Volvo EX90](https://www.jalopnik.com/1866994/lidar-permanently-damage-phone-camera/) are known to destroy cameras. This is an especially worrisome problem with pulsed 1550 nm lidar, but FMCW lidars have a continuous wave with lower peak power and may be slightly safer.
+- If you have many lidars around, the beams from each 905 nm lidar will be focused to a different spot on your retina, and you are no worse off than if there was a single lidar. But if there are many 1550 nm lidars around, their beams will have a cumulative effect at heating up your cornea, potentially exceeding the safety threshold.
+- 1550 nm lidars more often rely on beam steering since it is impractical to have an array of expensive fiber lasers. However, if the beam steering were to fail, the laser beam may be fixed in one direction. This can cause laser energy levels thousands of times stronger than the safety threshold in a particular direction, even when the lidar would be under the threshold when it's scanning properly.
+- 1550 nm lidars are known to damage cameras. For example, both [AEye lidars](https://arstechnica.com/cars/2019/01/man-says-ces-lidars-laser-was-so-powerful-it-wrecked-his-1998-camera/) and [Luminar lidars on the Volvo EX90](https://www.jalopnik.com/1866994/lidar-permanently-damage-phone-camera/) are known to destroy cameras. This is an especially worrisome problem with pulsed 1550 nm lidar, but FMCW lidars have a continuous wave with lower peak power and may be slightly safer.
 
 Eye safety aside, 1550 nm is also somewhat more attenuated by both water and water vapor, so they are likely to perform worse in poor weather.
 In fog, [Mie scattering](https://en.wikipedia.org/wiki/Mie_scattering) of the water droplets may also impact 1550 nm lidar more, as fog droplets are about 1.5 microns, and the scattering is more as the size of the sphere approaches the wavelength.
@@ -568,16 +577,17 @@ That said, 1550 nm lidars do have better range to begin with, thanks to outputti
 
 There are basically three commonly used types of lasers:
 
-* [Vertical cavity surface emitting laser](https://en.wikipedia.org/wiki/Vertical-cavity_surface-emitting_laser) (VCSEL)
-* Edge-emitting [laser diodes](https://en.wikipedia.org/wiki/Laser_diode)
-* [Fiber lasers](https://en.wikipedia.org/wiki/Fiber_laser)
+- [Vertical cavity surface emitting laser](https://en.wikipedia.org/wiki/Vertical-cavity_surface-emitting_laser) (VCSEL)
+- Edge-emitting [laser diodes](https://en.wikipedia.org/wiki/Laser_diode)
+- [Fiber lasers](https://en.wikipedia.org/wiki/Fiber_laser)
 
-| Laser type                             | Typical wavelength(s)             | Beam quality (M²)       | Coherence / FMCW-ready                                                                | Power per element                  | Cost     | Array?                                                                 |
-| -------------------------------------- | --------------------------------- | ----------------------- | ------------------------------------------------------------------------------------- | ---------------------------------- | -------- | --------------------------------------------------------------------------------------- |
-| **VCSEL**                              | 850–940 nm | Very good, circular     | **Low–mid** linewidth | **Low** (mW-tens mW)               | **Low**  | **Excellent**: monolithic **2D arrays** (10²–10⁵ emitters), fine pitch, easy eye-safety |
-| **Edge-emitting diodes**               | 905 nm, 1350-1550 nm               | Good (often elliptical) | **Mid–high**       | **Mid** (100 mW–W class with bars) | **Mid**  | **Good**: **1D bars/arrays** (dozens–hundreds)                 |
-| **Fiber/ECDL**                         | 1550 nm                    | Excellent               | **High** (kHz–100 kHz LW) **best for FMCW**                                         | **High** (W class via fiber amps)  | **High** | **Poor** as dense arrays; usually single source + split/steer                           |
-Summary of laser types
+| Laser type | Typical wavelength(s) | Beam quality (M²) | Coherence / FMCW-ready | Power per element | Cost | Array? |
+| --- | --- | --- | --- | --- | --- | --- |
+| **VCSEL** | 850–940 nm | Very good, circular | **Low–mid** linewidth | **Low** (mW-tens mW) | **Low** | **Excellent**: monolithic **2D arrays** (10²–10⁵ emitters), fine pitch, easy eye-safety |
+| **Edge-emitting diodes** | 905 nm, 1350-1550 nm | Good (often elliptical) | **Mid–high** | **Mid** (100 mW–W class with bars) | **Mid** | **Good**: **1D bars/arrays** (dozens–hundreds) |
+| **Fiber/ECDL** | 1550 nm | Excellent | **High** (kHz–100 kHz LW) **best for FMCW** | **High** (W class via fiber amps) | **High** | **Poor** as dense arrays; usually single source + split/steer |
+
+Table: Summary of laser types
 
 Vertical cavity surface-emitting lasers (VCSELs) are very cheap and you can make a bunch of them on a chip in a chip-scale solid state array.
 They are called "vertical cavity" because the beam comes out perpendicular to the chip.
@@ -605,8 +615,8 @@ Early Velodynes had very bad beam angles as each of the many circuit boards was 
 
 Here are some ways lidar measurements could have bad beam angles:
 
-* Accidentally forgetting to use the lidar-specific beam angles, or the manufacturer doesn't provide them
-* All the beams are offset by some angle even with lidar-specific beam angles, e.g. bad factory calibration, the lidar got bumped, or due to thermal expansion
+- Accidentally forgetting to use the lidar-specific beam angles, or the manufacturer doesn't provide them
+- All the beams are offset by some angle even with lidar-specific beam angles, e.g. bad factory calibration, the lidar got bumped, or due to thermal expansion
 
 This would typically manifest as the ground curving slightly, or the trajectory of the robot curving up or down even when it is expected to be flat.
 
@@ -619,7 +629,7 @@ The well-known KITTI dataset is known to have bad beam angles, and some publicat
 Lidars sometimes have different range offsets for each laser.
 This can happen when using discrete arrays where each laser-detector pair are separate components that need to be individually calibrated.
 
-pic https://i.dllu.net/kitti-range-offset_bb09c63a30681590.png : Two views of a flat wall in `2011_09_26/2011_09_26_drive_0084_extract/velodyne_points/data/0000000035.txt` from the [KITTI dataset](https://www.cvlibs.net/datasets/kitti/raw_data.php). Due to uncalibrated range offsets for some of the lasers of the Velodyne HDL-64E used, points from certain beams are offset by several centimeters.
+![Two views of a flat wall in `2011_09_26/2011_09_26_drive_0084_extract/velodyne_points/data/0000000035.txt` from the [KITTI dataset](https://www.cvlibs.net/datasets/kitti/raw_data.php). Due to uncalibrated range offsets for some of the lasers of the Velodyne HDL-64E used, points from certain beams are offset by several centimeters.](https://i.dllu.net/kitti-range-offset_bb09c63a30681590.png)
 
 ## Pixel crosstalk/blooming
 
@@ -631,9 +641,9 @@ Likewise, when there's a strong lidar return, there could be spurious next to th
 With array lidars, neighboring detectors sometimes pick up on the return meant for a different detector. This is called crosstalk.
 However, even single beam lidars can suffer from blooming just due to the fact that the beam has some divergence and that the optics are imperfect.
 
-pic argo-bloom.jpeg : An early prototype of the now-defunct Argo lidar illuminates the scene a whole column at a time, making it susceptible to blooming in the form of vertical columns. Source: [Argo AI on YouTube](https://web.archive.org/web/20221208123827/https://www.youtube.com/watch?v=I_tYxMh3ddA)
+![An early prototype of the now-defunct Argo lidar illuminates the scene a whole column at a time, making it susceptible to blooming in the form of vertical columns. Source: [Argo AI on YouTube](https://web.archive.org/web/20221208123827/https://www.youtube.com/watch?v=I_tYxMh3ddA)](argo-bloom.jpeg)
 
-pic https://i.dllu.net/ousterbloom_c33a2116dc78fe38.png : Spurious bloom returns around a retroreflector for an early Ouster OS1 prototype from 2022. Note that later firmware upgrades mitigated the issue. Source: [Ouster marketing data](https://studio.ouster.com/share/HRFP6K2AXZ1VFJ9I).
+![Spurious bloom returns around a retroreflector for an early Ouster OS1 prototype from 2022. Note that later firmware upgrades mitigated the issue. Source: [Ouster marketing data](https://studio.ouster.com/share/HRFP6K2AXZ1VFJ9I).](https://i.dllu.net/ousterbloom_c33a2116dc78fe38.png)
 
 This effect typically can't be easily calibrated away, and is usually handled in lidar firmware.
 
@@ -642,9 +652,9 @@ This effect typically can't be easily calibrated away, and is usually handled in
 This typically affects SPAD lidars like early Ouster lidars and the now-defunct Argo (formerly Princeton Lightwave) lidar.
 The reason is that when the return is very strong, all the SPADS get saturated at the beginning of the pulse.
 
-pic argo-bias.jpeg : For specular reflections, there's a spike in the point cloud from this early prototype of the Argo lidar. Source: [Argo AI on YouTube](https://web.archive.org/web/20221208123827/https://www.youtube.com/watch?v=I_tYxMh3ddA)
+![For specular reflections, there's a spike in the point cloud from this early prototype of the Argo lidar. Source: [Argo AI on YouTube](https://web.archive.org/web/20221208123827/https://www.youtube.com/watch?v=I_tYxMh3ddA)](argo-bias.jpeg)
 
-pic https://i.dllu.net/2025-08-28-19-06-37_536a815c35bc56c8.png : Subtle range bias on highly reflective painted stripes of a pedestrian crossing for an early Ouster OS1 prototype from 2022. Source: [Ouster marketing data](https://studio.ouster.com/share/HRFP6K2AXZ1VFJ9I?frame=9).
+![Subtle range bias on highly reflective painted stripes of a pedestrian crossing for an early Ouster OS1 prototype from 2022. Source: [Ouster marketing data](https://studio.ouster.com/share/HRFP6K2AXZ1VFJ9I?frame=9).](https://i.dllu.net/2025-08-28-19-06-37_536a815c35bc56c8.png)
 
 Typically, a pulse is a few nanoseconds long, which means up to a few meters in physical length of the light pulse.
 Even a slight saturation effect can cause the the peak of the time series to be biased significantly.
@@ -666,9 +676,11 @@ The encoder used in many spinning lidars is a circular ring with a bunch of tick
 However, it is possible that the encoder is physically offset to the side, because the ring is often just glued in place by humans.
 This results in a sinusoidal error.
 
-$ f(\theta, \epsilon) = \tan^{-1}\left(\frac{\sin\theta}{\cos\theta + \epsilon}\right) \approx \theta - \epsilon \sin \theta
+$$
+f(\theta, \epsilon) = \tan^{-1}\left(\frac{\sin\theta}{\cos\theta + \epsilon}\right) \approx \theta - \epsilon \sin \theta
+$$
 
-pic offset_encoder.svg offset encoder : Diagram of offset encoder and plot of measured angle vs true angle.
+![Diagram of offset encoder and plot of measured angle vs true angle.](offset_encoder.svg)
 
 This effect can cause a straight corridor to appear consistently curved to one side.
 
@@ -677,9 +689,9 @@ This effect can cause a straight corridor to appear consistently curved to one s
 Some lidars are packaged in such a way that there are two or more separate lidars in a box.
 For example, the Livox Mid 100 comprises three Mid-40s arranged side by side.
 
-pic https://i.dllu.net/2025-08-28-23-17-33_96af2de599c8b158.png : Livox Mid 40 and 100. Source: [Livox website](https://www.livoxtech.com/mid-40-and-mid-100).
+![Livox Mid 40 and 100. Source: [Livox website](https://www.livoxtech.com/mid-40-and-mid-100).](https://i.dllu.net/2025-08-28-23-17-33_96af2de599c8b158.png)
 
-pic luminar-hydra.png : Luminar Hydra has two separate lidars side by side. Source: [Luminar via Venturebeat](https://venturebeat.com/business/luminar-unveils-hydra-a-lidar-sensor-sold-on-subscription/).
+![Luminar Hydra has two separate lidars side by side. Source: [Luminar via Venturebeat](https://venturebeat.com/business/luminar-unveils-hydra-a-lidar-sensor-sold-on-subscription/).](luminar-hydra.png)
 
 Sometimes, physically jostling the lidar can cause the multiple separate lidars to become misaligned.
 It would then be necessary to treat them as separate lidars and calibrate their orientations accurately.
@@ -694,9 +706,9 @@ No! We should use the lowercase because it's a commonly used word just like rada
 When radar was some sort of highly exotic military technology, it made sense to use all caps for the acronym "radio detection and ranging", but by now it is so common that we should use lowercase.
 Many other words started out capitalized when new and exotic, but became lowercase once commonplace:
 
-* laser, Light Amplification by Stimulated Emission of Radiation
-* scuba, Self-Contained Underwater Breathing Apparatus
-* taser, Thomas A. Swift's Electric Rifle
+- laser, Light Amplification by Stimulated Emission of Radiation
+- scuba, Self-Contained Underwater Breathing Apparatus
+- taser, Thomas A. Swift's Electric Rifle
 
 Now that most phones and some cars are equipped with lidar, it's a good time to just use lowercase.
 Perhaps the main barrier to doing so is Apple's autocorrect.
@@ -710,10 +722,10 @@ Livox lidars are often mistakenly assumed to be solid state, but they are in fac
 
 Nonetheless, for some reason, many people somehow classify it as a solid state lidar simply because it's rectangular. For example:
 
-* [Tangram Vision](https://www.tangramvision.com/blog/sensors-201-scanning-and-solid-state-lidar) put it under "Solid State" even though it says it uses a "rotating mirror to change where it scans".
-* [SLAM Handbook](https://github.com/SLAM-Handbook-contributors/slam-handbook-public-release/issues/25) made the same mistake. Fortunately, they fixed it after I created a GitHub issue.
+- [Tangram Vision](https://www.tangramvision.com/blog/sensors-201-scanning-and-solid-state-lidar) put it under "Solid State" even though it says it uses a "rotating mirror to change where it scans".
+- [SLAM Handbook](https://github.com/SLAM-Handbook-contributors/slam-handbook-public-release/issues/25) made the same mistake. Fortunately, they fixed it after I created a GitHub issue.
 
-pic https://i.dllu.net/2019-05-20-16-36-14_DSCF2445_c7a520046d5664292b466ab56fda9cc24fb50cca_7ae9327ac72dc3d7.jpg : They may be rectangular, but they aren't solid state.
+![They may be rectangular, but they aren't solid state.](https://i.dllu.net/2019-05-20-16-36-14_DSCF2445_c7a520046d5664292b466ab56fda9cc24fb50cca_7ae9327ac72dc3d7.jpg)
 
 Likewise, Luminar lidars are often assumed to be solid state, but they are not. The Luminar Hydra uses galvos and the Luminar Iris uses polygonal mirrors.
 
@@ -725,6 +737,6 @@ For example, the Velodyne HDL-64 was marketed as solid state (even though it is 
 
 As justification, however, one might consider that it has an array of 64 lasers to distinguish vertical bearing, so perhaps it could be called 50% solid state as mechanical scanning is used only for the horizontal direction! In contrast, Luminar and Livox lidars use mechanical scanning for both directions, despite being a single non-spinning box.
 
-pic https://i.dllu.net/2020-01-09-13-17-30_DSCF4298_7144b010a4e6c5184ccde284fbe6608effb34a45_b11d175ed9f3cfc0.jpg : Velodyne booth at CES 2020. In the back corner you can see David Hall.
+![Velodyne booth at CES 2020. In the back corner you can see David Hall.](https://i.dllu.net/2020-01-09-13-17-30_DSCF4298_7144b010a4e6c5184ccde284fbe6608effb34a45_b11d175ed9f3cfc0.jpg)
 
-pic https://upload.wikimedia.org/wikipedia/commons/3/3d/Velodyne_ProductFamily_BlueLens_32GreenLens.png : Velodyne formerly marketed these as "Solid-State Hybrid".
+![Velodyne formerly marketed these as "Solid-State Hybrid".](https://upload.wikimedia.org/wikipedia/commons/3/3d/Velodyne_ProductFamily_BlueLens_32GreenLens.png)

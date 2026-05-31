@@ -1,199 +1,308 @@
 use crate::ast::*;
-use regex::Regex;
+use markdown::{mdast, Constructs, ParseOptions};
 use std::collections::HashMap;
-use std::str::Lines;
 
 #[derive(Debug, Default)]
 pub struct Parser {
     pub article: Article,
-    image_figures: Vec<usize>,
-    display_equations: Vec<usize>,
-    tables: Vec<usize>,
-
+    image_count: usize,
+    display_math_count: usize,
+    table_count: usize,
     section_id_counts: HashMap<String, usize>,
 }
 
 impl Parser {
     pub fn parse(&mut self, s: &str) {
-        let parts: Vec<&str> = s.splitn(2, "\n===\n").collect();
-        if parts.len() > 1 {
-            self.article.header = Some(self.parse_header(parts[0]));
-            self.article.body = self.parse_body(parts[1]);
-        } else {
-            self.article.header = None;
-            self.article.body = self.parse_body(parts[0]);
-        }
-    }
+        self.reset();
 
-    fn parse_header(&self, s: &str) -> ArticleHeader {
-        let mut lines = s.lines().filter(|line| !line.trim().is_empty());
-        let title = lines.next().unwrap_or_default().to_string();
-        let date = lines.next().map(|line| line.to_string());
-
-        ArticleHeader { title, date }
-    }
-
-    fn parse_body(&mut self, s: &str) -> Vec<Block> {
-        let mut blocks = Vec::new();
-        let mut lines = s.lines().peekable();
-
-        while lines.peek().is_some() {
-            if let Some(block) = self.parse_block(&mut lines) {
-                let ind = blocks.len();
-                match &block {
-                    Block::ImageFigure { .. } => {
-                        self.image_figures.push(ind);
-                    }
-                    Block::DisplayMath { .. } => {
-                        self.display_equations.push(ind);
-                    }
-                    Block::Table { .. } => {
-                        self.tables.push(ind);
-                    }
-                    _ => {}
-                }
-                blocks.push(block)
+        let mdast = match markdown::to_mdast(s, &markdown_parse_options()) {
+            Ok(mdast) => mdast,
+            Err(err) => {
+                eprintln!("markdown parse error: {}", err);
+                self.article.body = vec![Block::Paragraph(vec![InlineElement::Text(
+                    s.trim().to_string(),
+                )])];
+                return;
             }
+        };
+
+        let children = match mdast {
+            mdast::Node::Root(root) => root.children,
+            node => vec![node],
+        };
+        let body_start = if self.article.header.is_none() {
+            if let Some(mdast::Node::Yaml(yaml)) = children.first() {
+                self.article.header = parse_yaml_header(&yaml.value);
+                1
+            } else {
+                0
+            }
+        } else {
+            0
+        };
+
+        self.article.body = self.parse_blocks(&children[body_start..], s);
+    }
+
+    fn reset(&mut self) {
+        self.article = Article::default();
+        self.image_count = 0;
+        self.display_math_count = 0;
+        self.table_count = 0;
+        self.section_id_counts.clear();
+    }
+
+    fn parse_blocks(&mut self, children: &[mdast::Node], source: &str) -> Vec<Block> {
+        let mut blocks = Vec::new();
+        let mut idx = 0usize;
+
+        while idx < children.len() {
+            match &children[idx] {
+                mdast::Node::Yaml(_) | mdast::Node::Toml(_) | mdast::Node::Definition(_) => {}
+                mdast::Node::Html(html) => {
+                    blocks.push(Block::Raw(ensure_trailing_newline(html.value.clone())))
+                }
+                mdast::Node::Code(code) => {
+                    blocks.push(Block::CodeBlock {
+                        language: code.lang.clone(),
+                        code: ensure_trailing_newline(code.value.clone()),
+                    });
+                }
+                mdast::Node::Math(math) => blocks.push(self.display_math_block(&math.value)),
+                mdast::Node::Heading(heading) => {
+                    blocks
+                        .push(self.section_header_block(heading.depth as usize, &heading.children));
+                }
+                mdast::Node::Blockquote(blockquote) => {
+                    blocks.push(Block::BlockQuote(Self::block_children_to_inlines(
+                        &blockquote.children,
+                    )));
+                }
+                mdast::Node::List(list) => blocks.push(self.list_block(list)),
+                mdast::Node::Table(table) => {
+                    let mut consumed_caption = false;
+                    let caption = if let Some(caption) =
+                        children.get(idx + 1).and_then(table_caption_from_node)
+                    {
+                        consumed_caption = true;
+                        caption
+                    } else {
+                        Vec::new()
+                    };
+                    blocks.push(self.table_block(table, caption));
+                    if consumed_caption {
+                        idx += 1;
+                    }
+                }
+                mdast::Node::Paragraph(paragraph) => {
+                    if let Some(button) = Self::big_button_block(&paragraph.children) {
+                        blocks.push(button);
+                    } else if let Some(images) = Self::paragraph_images(&paragraph.children) {
+                        for image in images {
+                            blocks.push(self.image_block(image, source));
+                        }
+                    } else {
+                        blocks.push(Block::Paragraph(Self::inlines_from_mdast(
+                            &paragraph.children,
+                        )));
+                    }
+                }
+                mdast::Node::ThematicBreak(_) => {
+                    blocks.push(Block::Raw("<hr>\n".to_string()));
+                }
+                node => {
+                    let text = node.to_string();
+                    if !text.trim().is_empty() {
+                        blocks.push(Block::Paragraph(Self::parse_inline_markdown(text.trim())));
+                    }
+                }
+            }
+            idx += 1;
         }
+
         blocks
     }
 
-    fn parse_block(&mut self, lines: &mut std::iter::Peekable<Lines>) -> Option<Block> {
-        while let Some(&line) = lines.peek() {
-            let trimmed = line.trim();
+    fn section_header_block(&mut self, level: usize, children: &[mdast::Node]) -> Block {
+        let text = plain_text(children).trim().to_string();
+        let id = self.generate_id(&text);
+        Block::SectionHeader { level, id, text }
+    }
 
-            if trimmed.is_empty() {
-                lines.next();
-                continue;
-            }
+    fn image_block(&mut self, image: &mdast::Image, source: &str) -> Block {
+        let caption = image_label_source(image, source).unwrap_or_else(|| image.alt.clone());
+        let text = Self::parse_inline_markdown(caption.trim());
+        let id_number = self.image_count;
+        self.image_count += 1;
 
-            if trimmed == "???" {
-                return Some(Self::parse_raw_block(lines));
-            } else if trimmed == "~~~~" {
-                return Some(Self::parse_code_block_nohighlight(lines));
-            } else if trimmed == "~~~" {
-                return Some(Self::parse_code_block(lines));
-            } else if trimmed.starts_with('#') {
-                return Some(self.parse_section_header(lines));
-            } else if trimmed.starts_with("> ") {
-                return Some(self.parse_blockquote(lines));
-            } else if trimmed.starts_with("pic ") {
-                return Some(self.parse_image_figure(lines));
-            } else if trimmed.starts_with("$ ") {
-                return Some(self.parse_display_math(lines));
-            } else if trimmed.starts_with("| ") {
-                return Some(self.parse_table(lines));
-            } else if trimmed.starts_with(":: ") {
-                return Some(self.parse_big_button(lines));
-            } else if Self::is_unordered_list_item(trimmed) {
-                return Some(Self::parse_unordered_list(lines));
-            } else if trimmed.starts_with("1. ") {
-                return Some(Self::parse_ordered_list(lines));
+        Block::ImageFigure {
+            url: image.url.trim().to_string(),
+            id: None,
+            id_number,
+            alt: image.alt.trim().to_string(),
+            text,
+        }
+    }
+
+    fn display_math_block(&mut self, content: &str) -> Block {
+        let id_number = self.display_math_count;
+        self.display_math_count += 1;
+        Block::DisplayMath {
+            id: None,
+            id_number,
+            content: content.trim().to_string(),
+        }
+    }
+
+    fn table_block(&mut self, table: &mdast::Table, caption: Vec<InlineElement>) -> Block {
+        let mut rows = table.children.iter().filter_map(|node| {
+            if let mdast::Node::TableRow(row) = node {
+                Some(table_row_cells(row))
             } else {
-                return Some(Self::parse_paragraph(lines));
+                None
             }
-        }
+        });
 
-        None
+        let header = rows.next().unwrap_or_default();
+        let body_rows = rows.collect::<Vec<_>>();
+        let id_number = self.table_count;
+        self.table_count += 1;
+
+        Block::Table {
+            id_number,
+            header,
+            rows: body_rows,
+            caption,
+        }
     }
 
-    fn is_unordered_list_item(s: &str) -> bool {
-        // if you have more than 6 levels of list nesting then you're insane
-        s.starts_with("* ")
-            || s.starts_with("** ")
-            || s.starts_with("*** ")
-            || s.starts_with("**** ")
-            || s.starts_with("***** ")
-            || s.starts_with("****** ")
+    fn list_block(&self, list: &mdast::List) -> Block {
+        let mut items = Vec::new();
+        collect_list_items(list, 1, &mut items);
+        if list.ordered {
+            Block::OrderedList(items)
+        } else {
+            Block::UnorderedList(items)
+        }
     }
 
-    fn is_ordered_list_item(s: &str) -> bool {
-        lazy_static! {
-            static ref ORDERED_LIST_REGEX: Regex = Regex::new(r"^\d+\. ").unwrap();
-        }
-        ORDERED_LIST_REGEX.is_match(s)
+    fn big_button_block(children: &[mdast::Node]) -> Option<Block> {
+        let text = plain_text(children);
+        let trimmed = text.trim();
+        let rest = trimmed.strip_prefix(":: ")?;
+        let (label, url) = rest.rsplit_once(' ')?;
+        Some(Block::BigButton {
+            text: Self::parse_inline_markdown(label.trim()),
+            url: url.trim().to_string(),
+        })
     }
 
-    fn parse_raw_block(lines: &mut std::iter::Peekable<Lines>) -> Block {
-        // Consume the starting "???"
-        lines.next();
-
-        let mut content = String::new();
-
-        while let Some(&line) = lines.peek() {
-            let trimmed = line.trim();
-            if trimmed == "???" {
-                // Consume the ending "???"
-                lines.next();
-                break;
-            } else {
-                content.push_str(line);
-                content.push('\n');
-                lines.next();
+    fn paragraph_images(children: &[mdast::Node]) -> Option<Vec<&mdast::Image>> {
+        let mut images = Vec::new();
+        for child in children {
+            match child {
+                mdast::Node::Image(image) => images.push(image),
+                mdast::Node::Text(text) if text.value.trim().is_empty() => {}
+                mdast::Node::Break(_) => {}
+                _ => return None,
             }
         }
-
-        Block::Raw(content)
+        if images.is_empty() {
+            None
+        } else {
+            Some(images)
+        }
     }
 
-    fn parse_code_block(lines: &mut std::iter::Peekable<Lines>) -> Block {
-        // Consume the starting "~~~"
-        lines.next();
-
-        let mut language = None;
-        let mut code = String::new();
-
-        if let Some(&line) = lines.peek() {
-            let trimmed = line.trim();
-            if let Some(stripped) = trimmed.strip_prefix("lang ") {
-                language = Some(stripped.to_string());
-                lines.next();
+    fn block_children_to_inlines(children: &[mdast::Node]) -> Vec<InlineElement> {
+        let mut elements = Vec::new();
+        for child in children {
+            if !elements.is_empty() {
+                elements.push(InlineElement::Text("\n".to_string()));
+            }
+            match child {
+                mdast::Node::Paragraph(paragraph) => {
+                    elements.extend(Self::inlines_from_mdast(&paragraph.children));
+                }
+                mdast::Node::Heading(heading) => {
+                    elements.extend(Self::inlines_from_mdast(&heading.children));
+                }
+                mdast::Node::List(list) => {
+                    let mut items = Vec::new();
+                    collect_list_items(list, 1, &mut items);
+                    for item in items {
+                        elements.extend(item.text);
+                    }
+                }
+                node => elements.extend(Self::parse_inline_markdown(&node.to_string())),
             }
         }
-
-        while let Some(&line) = lines.peek() {
-            let trimmed = line.trim();
-            if trimmed == "~~~" {
-                // Consume the ending "~~~"
-                lines.next();
-                break;
-            } else {
-                code.push_str(line);
-                code.push('\n');
-                lines.next();
-            }
-        }
-
-        Block::CodeBlock { language, code }
+        elements
     }
 
-    fn parse_code_block_nohighlight(lines: &mut std::iter::Peekable<Lines>) -> Block {
-        // Consume the starting "~~~~"
-        lines.next();
-
-        let mut code = String::new();
-
-        while let Some(&line) = lines.peek() {
-            let trimmed = line.trim();
-            if trimmed == "~~~~" {
-                // Consume the ending "~~~~"
-                lines.next();
-                break;
-            } else {
-                code.push_str(line);
-                code.push('\n');
-                lines.next();
-            }
+    fn parse_inline_markdown(s: &str) -> Vec<InlineElement> {
+        if s.is_empty() {
+            return Vec::new();
         }
+        match markdown::to_mdast(s, &markdown_parse_options()) {
+            Ok(mdast::Node::Root(root)) => {
+                if root.children.len() == 1 {
+                    if let mdast::Node::Paragraph(paragraph) = &root.children[0] {
+                        return Self::inlines_from_mdast(&paragraph.children);
+                    }
+                }
+                vec![InlineElement::Text(s.to_string())]
+            }
+            _ => vec![InlineElement::Text(s.to_string())],
+        }
+    }
 
-        Block::CodeBlock {
-            language: None,
-            code,
+    fn inlines_from_mdast(children: &[mdast::Node]) -> Vec<InlineElement> {
+        let mut elements = Vec::new();
+        for child in children {
+            elements.extend(Self::inline_from_mdast(child));
+        }
+        elements
+    }
+
+    fn inline_from_mdast(node: &mdast::Node) -> Vec<InlineElement> {
+        match node {
+            mdast::Node::Text(text) => vec![InlineElement::Text(text.value.clone())],
+            mdast::Node::InlineCode(code) => vec![InlineElement::Code(code.value.clone())],
+            mdast::Node::InlineMath(math) => vec![InlineElement::InlineMath(math.value.clone())],
+            mdast::Node::Emphasis(emphasis) => vec![InlineElement::Emphasis(
+                Self::inlines_from_mdast(&emphasis.children),
+            )],
+            mdast::Node::Strong(strong) => vec![InlineElement::Strong(Self::inlines_from_mdast(
+                &strong.children,
+            ))],
+            mdast::Node::Delete(delete) => Self::inlines_from_mdast(&delete.children),
+            mdast::Node::Link(link) => vec![InlineElement::Link {
+                text: Self::inlines_from_mdast(&link.children),
+                url: link.url.clone(),
+            }],
+            mdast::Node::LinkReference(reference) => {
+                let label = plain_text(&reference.children);
+                vec![InlineElement::Text(label)]
+            }
+            mdast::Node::FootnoteReference(reference) => {
+                vec![InlineElement::Text(reference.identifier.clone())]
+            }
+            mdast::Node::Break(_) => vec![InlineElement::Text("\n".to_string())],
+            mdast::Node::Html(html) => vec![InlineElement::RawHtml(html.value.clone())],
+            mdast::Node::Image(image) => vec![InlineElement::Text(image.alt.clone())],
+            node => {
+                let text = node.to_string();
+                if text.is_empty() {
+                    Vec::new()
+                } else {
+                    vec![InlineElement::Text(text)]
+                }
+            }
         }
     }
 
     fn generate_id(&mut self, text: &str) -> String {
-        // Generate a URL-friendly ID from the text
         let base_id = text
             .to_lowercase()
             .chars()
@@ -201,7 +310,6 @@ impl Parser {
             .collect::<String>()
             .replace(' ', "-");
 
-        // Ensure the ID is unique
         let count = self.section_id_counts.entry(base_id.clone()).or_insert(0);
         *count += 1;
 
@@ -211,535 +319,191 @@ impl Parser {
             format!("{}-{}", base_id, count)
         }
     }
+}
 
-    fn parse_section_header(&mut self, lines: &mut std::iter::Peekable<Lines>) -> Block {
-        if let Some(line) = lines.next() {
-            let trimmed = line.trim();
-            let level = trimmed.chars().take_while(|&c| c == '#').count();
-            let text = trimmed[level..].trim();
-            let id = self.generate_id(text);
-            Block::SectionHeader {
-                level,
-                id,
-                text: text.to_string(),
-            }
-        } else {
-            // Should not reach here
-            Block::Paragraph(vec![])
+fn markdown_parse_options() -> ParseOptions {
+    ParseOptions {
+        constructs: Constructs {
+            frontmatter: true,
+            math_flow: true,
+            math_text: true,
+            ..Constructs::gfm()
+        },
+        ..ParseOptions::default()
+    }
+}
+
+fn parse_yaml_header(s: &str) -> Option<ArticleHeader> {
+    let mut title = None;
+    let mut date = None;
+    for line in s.lines() {
+        let Some((key, value)) = line.split_once(':') else {
+            continue;
+        };
+        let value = trim_yaml_scalar(value);
+        match key.trim() {
+            "title" => title = Some(value),
+            "date" => date = Some(value),
+            _ => {}
         }
     }
+    title.map(|title| ArticleHeader { title, date })
+}
 
-    fn parse_blockquote(&self, lines: &mut std::iter::Peekable<Lines>) -> Block {
-        let mut content = String::new();
-
-        while let Some(&line) = lines.peek() {
-            let trimmed = line.trim();
-            if let Some(stripped) = trimmed.strip_prefix("> ") {
-                content.push_str(stripped);
-                content.push('\n');
-                lines.next();
-            } else {
-                break;
-            }
+fn trim_yaml_scalar(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.len() >= 2 {
+        let bytes = trimmed.as_bytes();
+        if (bytes[0] == b'"' && bytes[trimmed.len() - 1] == b'"')
+            || (bytes[0] == b'\'' && bytes[trimmed.len() - 1] == b'\'')
+        {
+            return trimmed[1..trimmed.len() - 1].to_string();
         }
-
-        Block::BlockQuote(Self::parse_inline_elements(&content))
     }
+    trimmed.to_string()
+}
 
-    fn parse_image_figure(&self, lines: &mut std::iter::Peekable<Lines>) -> Block {
-        if let Some(line) = lines.next() {
-            let trimmed = line.trim();
-            if let Some(rest) = trimmed.strip_prefix("pic ") {
-                if let Some((left, caption)) = rest.split_once(" : ") {
-                    let left = left.trim();
-                    // left contains: URL and then ALT text
-                    let mut parts = left.split_whitespace();
-                    let url = parts.next().unwrap_or("").to_string();
-                    let alt = parts.collect::<Vec<_>>().join(" ");
-
-                    let mut text = Self::parse_inline_elements(caption.trim());
-                    let mut id = None;
-                    for element in &mut text {
-                        if let InlineElement::ReferenceAnchor {
-                            content,
-                            ref mut invisible,
-                        } = element
-                        {
-                            *invisible = true;
-                            id = Some(content);
-                        }
-                    }
-                    return Block::ImageFigure {
-                        url: url.trim().to_string(),
-                        id: id.cloned(),
-                        id_number: self.image_figures.len(),
-                        alt: alt.trim().to_string(),
-                        text,
-                    };
-                }
-            }
-        }
-
-        Block::Paragraph(vec![])
+fn table_caption_from_node(node: &mdast::Node) -> Option<Vec<InlineElement>> {
+    if let mdast::Node::Paragraph(paragraph) = node {
+        strip_table_caption_prefix(&paragraph.children)
+            .map(|children| Parser::inlines_from_mdast(&children))
+    } else {
+        None
     }
+}
 
-    fn parse_display_math(&self, lines: &mut std::iter::Peekable<Lines>) -> Block {
-        let mut content = String::new();
-        if let Some(line) = lines.next() {
-            let trimmed = line.trim();
-            if let Some(math) = trimmed.strip_prefix("$ ") {
-                content.push_str(math);
-                // collect subsequent non-empty lines as part of the display math block
-                while let Some(&next_line) = lines.peek() {
-                    let t = next_line.trim();
-                    if t.is_empty() {
-                        lines.next();
-                        break;
-                    }
-                    // Stop if a new block starts (conservative: allow most content inside math)
-                    if t == "???"
-                        || t == "~~~"
-                        || t == "~~~~"
-                        || t.starts_with("#")
-                        || t.starts_with("> ")
-                        || t.starts_with("pic ")
-                        || t.starts_with("| ")
-                        || t.starts_with(":: ")
-                        || Self::is_unordered_list_item(t)
-                        || Self::is_ordered_list_item(t)
-                    {
-                        break;
-                    }
-                    content.push('\n');
-                    content.push_str(next_line);
-                    lines.next();
-                }
-                return Block::DisplayMath {
-                    id: None,
-                    id_number: self.display_equations.len(),
-                    content,
-                };
-            }
-        }
-
-        Block::Paragraph(vec![])
-    }
-
-    fn parse_unordered_list(lines: &mut std::iter::Peekable<Lines>) -> Block {
-        let mut items = Vec::new();
-
-        while let Some(&line) = lines.peek() {
-            let trimmed = line.trim();
-
-            if Self::is_unordered_list_item(trimmed) {
-                let level = trimmed.chars().take_while(|&c| c == '*').count();
-                let content = trimmed[level..].trim();
-                items.push(ListItem {
-                    level,
-                    text: Self::parse_inline_elements(content),
-                });
-                lines.next();
-            } else if trimmed.is_empty() {
-                lines.next(); // end of list block
-                break;
-            } else {
-                // Continuation line for previous list item (multiline <li>)
-                if !items.is_empty() {
-                    let mut extra = Self::parse_inline_elements(trimmed);
-                    if let Some(last) = items.last_mut() {
-                        last.text.push(InlineElement::Text(" ".into()));
-                        last.text.append(&mut extra);
-                    }
-                    lines.next();
-                } else {
-                    break;
-                }
-            }
-        }
-
-        Block::UnorderedList(items)
-    }
-
-    fn parse_ordered_list(lines: &mut std::iter::Peekable<Lines>) -> Block {
-        let mut items = Vec::new();
-
-        while let Some(&line) = lines.peek() {
-            let trimmed = line.trim();
-
-            if Self::is_ordered_list_item(trimmed) {
-                let parts: Vec<&str> = trimmed.splitn(2, '.').collect();
-                let content = parts[1].trim();
-                // level is always 1 for flat ordered lists (nesting not supported here)
-                items.push(ListItem {
-                    level: 1,
-                    text: Self::parse_inline_elements(content),
-                });
-                lines.next();
-            } else if trimmed.is_empty() {
-                lines.next(); // Skip empty line
-                break;
-            } else {
-                // Continuation for previous list item
-                if !items.is_empty() {
-                    let mut extra = Self::parse_inline_elements(trimmed);
-                    if let Some(last) = items.last_mut() {
-                        last.text.push(InlineElement::Text(" ".into()));
-                        last.text.append(&mut extra);
-                    }
-                    lines.next();
-                } else {
-                    break;
-                }
-            }
-        }
-
-        Block::OrderedList(items)
-    }
-
-    fn parse_paragraph(lines: &mut std::iter::Peekable<Lines>) -> Block {
-        let mut content = String::new();
-
-        while let Some(&line) = lines.peek() {
-            let trimmed = line.trim();
-
-            if trimmed.is_empty() {
-                lines.next(); // Skip empty line
-                break;
-            } else {
-                // Stop paragraph if hitting the start of a new block
-                if trimmed == "???"
-                    || trimmed == "~~~~"
-                    || trimmed == "~~~"
-                    || trimmed.starts_with('#')
-                    || trimmed.starts_with("> ")
-                    || trimmed.starts_with("pic ")
-                    || trimmed.starts_with("$ ")
-                    || trimmed.starts_with("| ")
-                    || trimmed.starts_with(":: ")
-                    || Self::is_unordered_list_item(trimmed)
-                    || Self::is_ordered_list_item(trimmed)
-                {
-                    break;
-                }
-                content.push_str(line);
-                content.push('\n');
-                lines.next();
-            }
-        }
-
-        Block::Paragraph(Self::parse_inline_elements(content.trim_end()))
-    }
-
-    fn parse_inline_elements(s: &str) -> Vec<InlineElement> {
-        let mut elements = Vec::new();
-        let chars: Vec<char> = s.chars().collect();
-        let mut i = 0usize;
-        let mut buffer = String::new();
-        while i < chars.len() {
-            let c = chars[i];
-            // escape: treat next char literally
-            if c == '\\' {
-                if i + 1 < chars.len() {
-                    buffer.push(chars[i + 1]);
-                    i += 2;
-                } else {
-                    i += 1;
-                }
-                continue;
-            }
-            // code span
-            if c == '`' {
-                if !buffer.is_empty() {
-                    elements.push(InlineElement::Text(buffer.clone()));
-                    buffer.clear();
-                }
-                i += 1; // skip opening
-                let mut code = String::new();
-                while i < chars.len() {
-                    if chars[i] == '\\' && i + 1 < chars.len() && chars[i + 1] == '`' {
-                        code.push('`');
-                        i += 2;
-                        continue;
-                    }
-                    if chars[i] == '`' {
-                        i += 1; // close
-                        break;
-                    }
-                    code.push(chars[i]);
-                    i += 1;
-                }
-                elements.push(InlineElement::Code(code));
-                continue;
-            }
-            // inline math
-            if c == '$' {
-                if !buffer.is_empty() {
-                    elements.push(InlineElement::Text(buffer.clone()));
-                    buffer.clear();
-                }
-                i += 1; // skip opening
-                let mut math = String::new();
-                while i < chars.len() {
-                    if chars[i] == '\\' && i + 1 < chars.len() && chars[i + 1] == '$' {
-                        math.push('$');
-                        i += 2;
-                        continue;
-                    }
-                    if chars[i] == '$' {
-                        i += 1; // close
-                        break;
-                    }
-                    math.push(chars[i]);
-                    i += 1;
-                }
-                elements.push(InlineElement::InlineMath(math));
-                continue;
-            }
-            // link
-            if c == '[' {
-                if !buffer.is_empty() {
-                    elements.push(InlineElement::Text(buffer.clone()));
-                    buffer.clear();
-                }
-                i += 1; // skip '['
-                let start = i;
-                while i < chars.len() && chars[i] != ']' {
-                    i += 1;
-                }
-                let link_text: String = chars[start..i].iter().collect();
-                if i < chars.len() {
-                    i += 1;
-                } // skip ']'
-                if i < chars.len() && chars[i] == '(' {
-                    i += 1; // skip '('
-                    let mut url = String::new();
-                    let mut escaped = false;
-                    let mut closed = false;
-                    while i < chars.len() {
-                        let ch = chars[i];
-                        if escaped {
-                            url.push(ch);
-                            escaped = false;
-                            i += 1;
-                            continue;
-                        }
-                        if ch == '\\' {
-                            escaped = true;
-                            i += 1;
-                            continue;
-                        }
-                        if ch == ')' {
-                            i += 1; // consume ')'
-                            closed = true;
-                            break;
-                        }
-                        url.push(ch);
-                        i += 1;
-                    }
-                    if escaped {
-                        // Trailing backslash with no character to escape; keep it literal.
-                        url.push('\\');
-                    }
-                    if !closed {
-                        // No closing ')' found; rewind to treat as literal text.
-                        buffer.push('[');
-                        buffer.push_str(&link_text);
-                        buffer.push(']');
-                        buffer.push('(');
-                        buffer.push_str(&url);
-                        continue;
-                    }
-                    elements.push(InlineElement::Link {
-                        text: Self::parse_inline_elements(&link_text),
-                        url,
-                    });
-                    continue;
-                } else {
-                    let trimmed = link_text.trim();
-                    if let Some(name) = trimmed.strip_prefix('#').and_then(|rest| {
-                        if is_valid_refname(rest) {
-                            Some(rest.to_string())
-                        } else {
-                            None
-                        }
-                    }) {
-                        elements.push(InlineElement::ReferenceAnchor {
-                            content: name,
-                            invisible: false,
-                        });
-                    } else {
-                        buffer.push('[');
-                        buffer.push_str(&link_text);
-                        if i <= chars.len() {
-                            buffer.push(']');
-                        }
-                    }
+fn strip_table_caption_prefix(children: &[mdast::Node]) -> Option<Vec<mdast::Node>> {
+    let mut result = children.to_vec();
+    for idx in 0..result.len() {
+        match &mut result[idx] {
+            mdast::Node::Text(text) => {
+                let trimmed = text.value.trim_start();
+                if trimmed.is_empty() {
                     continue;
                 }
+                let stripped = trimmed.strip_prefix("Table:")?;
+                text.value = stripped.trim_start().to_string();
+                if text.value.is_empty() {
+                    result.remove(idx);
+                }
+                return Some(result);
             }
-            if c == '(' && i + 2 < chars.len() && chars[i + 1] == '#' {
-                let mut j = i + 2;
-                while j < chars.len() && is_valid_refname_char(chars[j]) {
-                    j += 1;
-                }
-                if j > i + 2 && j < chars.len() && chars[j] == ')' {
-                    if !buffer.is_empty() {
-                        elements.push(InlineElement::Text(buffer.clone()));
-                        buffer.clear();
-                    }
-                    let name: String = chars[i + 2..j].iter().collect();
-                    elements.push(InlineElement::Reference(name));
-                    i = j + 1;
-                    continue;
-                }
-            }
-            // emphasis _
-            if c == '_' {
-                if !buffer.is_empty() {
-                    elements.push(InlineElement::Text(buffer.clone()));
-                    buffer.clear();
-                }
-                i += 1; // skip '_'
-                let mut emph = String::new();
-                while i < chars.len() {
-                    if chars[i] == '\\' && i + 1 < chars.len() && chars[i + 1] == '_' {
-                        emph.push('_');
-                        i += 2;
-                        continue;
-                    }
-                    if chars[i] == '_' {
-                        i += 1; // close
-                        break;
-                    }
-                    emph.push(chars[i]);
-                    i += 1;
-                }
-                elements.push(InlineElement::Emphasis(Self::parse_inline_elements(&emph)));
-                continue;
-            }
-            // strong **
-            if c == '*' && i + 1 < chars.len() && chars[i + 1] == '*' {
-                if !buffer.is_empty() {
-                    elements.push(InlineElement::Text(buffer.clone()));
-                    buffer.clear();
-                }
-                i += 2; // skip '**'
-                let mut strong = String::new();
-                while i < chars.len() {
-                    if i + 1 < chars.len() && chars[i] == '*' && chars[i + 1] == '*' {
-                        i += 2; // close
-                        break;
-                    }
-                    if chars[i] == '\\' && i + 1 < chars.len() && chars[i + 1] == '*' {
-                        strong.push('*');
-                        i += 2;
-                        continue;
-                    }
-                    strong.push(chars[i]);
-                    i += 1;
-                }
-                elements.push(InlineElement::Strong(Self::parse_inline_elements(&strong)));
-                continue;
-            }
-
-            // default
-            buffer.push(c);
-            i += 1;
+            _ => return None,
         }
-        if !buffer.is_empty() {
-            elements.push(InlineElement::Text(buffer));
-        }
-        elements
     }
+    None
+}
 
-    fn parse_table(&self, lines: &mut std::iter::Peekable<Lines>) -> Block {
-        let mut table_lines: Vec<String> = Vec::new();
-        while let Some(&line) = lines.peek() {
-            let t = line.trim();
-            if t.starts_with("| ") || is_table_separator_row(t) {
-                table_lines.push(line.to_string());
-                lines.next();
+fn table_row_cells(row: &mdast::TableRow) -> Vec<Vec<InlineElement>> {
+    row.children
+        .iter()
+        .filter_map(|node| {
+            if let mdast::Node::TableCell(cell) = node {
+                Some(Parser::inlines_from_mdast(&cell.children))
             } else {
-                break;
+                None
             }
-        }
-        // Next non-empty line is caption
-        let mut caption = Vec::new();
-        while let Some(&line) = lines.peek() {
-            if line.trim().is_empty() {
-                lines.next();
-                continue;
-            } else {
-                caption = Self::parse_inline_elements(line.trim());
-                lines.next();
-                break;
-            }
-        }
-        let mut header: Vec<Vec<InlineElement>> = Vec::new();
-        let mut rows: Vec<Vec<Vec<InlineElement>>> = Vec::new();
-        let mut header_filled = false;
+        })
+        .collect()
+}
 
-        for row in table_lines.into_iter() {
-            let t = row.trim();
-            if is_table_separator_row(t) {
-                continue;
-            }
-            let cells = parse_table_row_cells(&row)
-                .into_iter()
-                .map(|cell| Self::parse_inline_elements(cell.trim()))
-                .collect::<Vec<_>>();
-            if !header_filled {
-                header = cells;
-                header_filled = true;
-            } else {
-                rows.push(cells);
-            }
-        }
-        Block::Table {
-            id_number: self.tables.len(),
-            header,
-            rows,
-            caption,
-        }
-    }
+fn collect_list_items(list: &mdast::List, level: usize, items: &mut Vec<crate::ast::ListItem>) {
+    for child in &list.children {
+        let mdast::Node::ListItem(item) = child else {
+            continue;
+        };
 
-    fn parse_big_button(&self, lines: &mut std::iter::Peekable<Lines>) -> Block {
-        if let Some(line) = lines.next() {
-            let trimmed = line.trim();
-            if let Some(rest) = trimmed.strip_prefix(":: ") {
-                if let Some((text, url)) = rest.rsplit_once(' ') {
-                    return Block::BigButton {
-                        text: Self::parse_inline_elements(text.trim()),
-                        url: url.trim().to_string(),
-                    };
+        let mut text = Vec::new();
+        let mut nested_lists = Vec::new();
+        for item_child in &item.children {
+            match item_child {
+                mdast::Node::Paragraph(paragraph) => {
+                    if !text.is_empty() {
+                        text.push(InlineElement::Text(" ".to_string()));
+                    }
+                    text.extend(Parser::inlines_from_mdast(&paragraph.children));
+                }
+                mdast::Node::List(nested) => nested_lists.push(nested),
+                node => {
+                    let plain = node.to_string();
+                    if !plain.trim().is_empty() {
+                        if !text.is_empty() {
+                            text.push(InlineElement::Text(" ".to_string()));
+                        }
+                        text.extend(Parser::parse_inline_markdown(plain.trim()));
+                    }
                 }
             }
         }
-        Block::Paragraph(vec![])
+
+        items.push(crate::ast::ListItem { level, text });
+        for nested in nested_lists {
+            collect_list_items(nested, level + 1, items);
+        }
     }
 }
 
-fn parse_table_row_cells(row: &str) -> Vec<String> {
-    row.split('|')
-        .map(|s| s.to_string())
-        .filter(|s| !s.trim().is_empty())
-        .collect::<Vec<_>>()
-}
-
-fn is_table_separator_row(row: &str) -> bool {
-    let trimmed = row.trim();
-    if trimmed.is_empty() {
-        return true;
+fn plain_text(children: &[mdast::Node]) -> String {
+    let mut text = String::new();
+    for child in children {
+        match child {
+            mdast::Node::Text(node) => text.push_str(&node.value),
+            mdast::Node::InlineCode(node) => text.push_str(&node.value),
+            mdast::Node::InlineMath(node) => text.push_str(&node.value),
+            mdast::Node::Code(node) => text.push_str(&node.value),
+            mdast::Node::Math(node) => text.push_str(&node.value),
+            mdast::Node::Html(node) => text.push_str(&node.value),
+            mdast::Node::Image(node) => text.push_str(&node.alt),
+            mdast::Node::Break(_) => text.push('\n'),
+            node => {
+                if let Some(grandchildren) = node.children() {
+                    text.push_str(&plain_text(grandchildren));
+                } else {
+                    text.push_str(&node.to_string());
+                }
+            }
+        }
     }
-    trimmed.chars().all(|c| matches!(c, '|' | '-' | ' ' | '\t'))
+    text
 }
 
-fn is_valid_refname(s: &str) -> bool {
-    !s.is_empty() && s.chars().all(is_valid_refname_char)
+fn image_label_source(image: &mdast::Image, source: &str) -> Option<String> {
+    let position = image.position.as_ref()?;
+    let snippet = source.get(position.start.offset..position.end.offset)?;
+    raw_image_label(snippet)
 }
 
-fn is_valid_refname_char(c: char) -> bool {
-    c.is_alphanumeric() || matches!(c, '-' | '_')
+fn raw_image_label(snippet: &str) -> Option<String> {
+    let rest = snippet.strip_prefix("![")?;
+    let mut escaped = false;
+    let mut bracket_depth = 0usize;
+
+    for (idx, ch) in rest.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if ch == '\\' {
+            escaped = true;
+            continue;
+        }
+
+        match ch {
+            '[' => bracket_depth += 1,
+            ']' if bracket_depth == 0 => return Some(rest[..idx].to_string()),
+            ']' => bracket_depth = bracket_depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+
+    None
+}
+
+fn ensure_trailing_newline(mut s: String) -> String {
+    if !s.ends_with('\n') {
+        s.push('\n');
+    }
+    s
 }
 
 #[cfg(test)]
@@ -757,8 +521,8 @@ mod tests {
     }
 
     #[test]
-    fn separator_rows_are_ignored() {
-        let input = "Table Demo\n\n===\n\n| Colour | Pattern |\n| ------- | -------- |\n| White | Spots |\n";
+    fn parses_markdown_table_with_caption() {
+        let input = "---\ntitle: Table Demo\n---\n\n| Colour | Pattern |\n| --- | --- |\n| White | Spots |\n\nTable: Example caption.\n";
         let mut parser = Parser::default();
         parser.parse(input);
         let table = parser
@@ -766,8 +530,14 @@ mod tests {
             .body
             .iter()
             .find_map(|block| {
-                if let Block::Table { header, rows, .. } = block {
-                    Some((header, rows))
+                if let Block::Table {
+                    header,
+                    rows,
+                    caption,
+                    ..
+                } = block
+                {
+                    Some((header, rows, caption))
                 } else {
                     None
                 }
@@ -780,76 +550,53 @@ mod tests {
         assert_eq!(table.1[0].len(), 2);
         assert_eq!(cell_text(&table.1[0][0]), "White");
         assert_eq!(cell_text(&table.1[0][1]), "Spots");
+        assert_eq!(cell_text(table.2), "Example caption.");
     }
 
     #[test]
-    fn separator_rows_with_wrong_column_count_are_ignored() {
-        let input = "Table Demo\n\n===\n\n| Colour | Pattern |\n|----------------|\n| White | Spots |\n| Black | Solid |\n";
+    fn parses_markdown_image_as_figure() {
+        let input = "---\ntitle: Image Demo\n---\n\n![Caption _text_](photo.jpg)\n";
         let mut parser = Parser::default();
         parser.parse(input);
-        let table = parser
+        let figure = parser
             .article
             .body
             .iter()
             .find_map(|block| {
-                if let Block::Table { rows, .. } = block {
-                    Some(rows)
+                if let Block::ImageFigure { alt, text, .. } = block {
+                    Some((alt, text))
                 } else {
                     None
                 }
             })
-            .expect("expected table rows");
-        assert_eq!(table.len(), 2);
-        assert!(table.iter().all(|row| row.len() == 2));
+            .expect("expected image figure");
+        assert_eq!(figure.0, "Caption text");
+        assert!(figure
+            .1
+            .iter()
+            .any(|el| matches!(el, InlineElement::Emphasis(_))));
     }
 
     #[test]
-    fn parses_reference_citation() {
-        let input = "Doc\n\n===\n\nThis cites (#eade).\n";
+    fn parses_inline_html_as_raw_html() {
+        let input = "---\ntitle: Reference Demo\n---\n\n- <cite class=\"refname\" id=\"eade\">eade</cite> Eade.\n";
         let mut parser = Parser::default();
         parser.parse(input);
-        let paragraph = parser
+        let list = parser
             .article
             .body
             .iter()
             .find_map(|block| {
-                if let Block::Paragraph(elements) = block {
-                    Some(elements)
+                if let Block::UnorderedList(items) = block {
+                    Some(items)
                 } else {
                     None
                 }
             })
-            .expect("expected paragraph");
-        assert!(paragraph
+            .expect("expected list");
+        assert!(list[0]
+            .text
             .iter()
-            .any(|el| { matches!(el, InlineElement::Reference(name) if name == "eade") }));
-    }
-
-    #[test]
-    fn parses_reference_anchor() {
-        let input = "Doc\n\n===\n\n[#eade]\n";
-        let mut parser = Parser::default();
-        parser.parse(input);
-        let paragraph = parser
-            .article
-            .body
-            .iter()
-            .find_map(|block| {
-                if let Block::Paragraph(elements) = block {
-                    Some(elements)
-                } else {
-                    None
-                }
-            })
-            .expect("expected paragraph");
-        assert!(paragraph.iter().any(|el| {
-            matches!(
-                el,
-                InlineElement::ReferenceAnchor {
-                    content,
-                    invisible: false
-                } if content == "eade"
-            )
-        }));
+            .any(|el| matches!(el, InlineElement::RawHtml(html) if html.contains("id=\"eade\""))));
     }
 }

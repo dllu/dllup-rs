@@ -1,36 +1,36 @@
-Chicken rice in San Francisco
+---
+title: "Chicken rice in San Francisco"
+date: "2018-06-10"
+---
 
-2018-06-10
 
-===
-
-pic https://pics.dllu.net/file/dllu-pics/2020-05-29-18-17-47_DSCF5250_adec3569ef61415da569075c8d18157b9f6790ee.jpg : Chicken rice by [@dabaosingapore](https://www.instagram.com/dabaosingapore/)
+![Chicken rice by [@dabaosingapore](https://www.instagram.com/dabaosingapore/)](https://pics.dllu.net/file/dllu-pics/2020-05-29-18-17-47_DSCF5250_adec3569ef61415da569075c8d18157b9f6790ee.jpg)
 
 [Hainanese Chicken Rice](https://en.wikipedia.org/wiki/Hainanese_chicken_rice) (海南鸡饭), more commonly referred to as just "chicken rice" is a Singaporean dish consisting of poached chicken, rice cooked in chicken broth, soy sauce, ginger, and garlic.
 Over time, the dish has evolved significantly, following several [waves of Chinese immigration to Singapore](https://en.wikipedia.org/wiki/Chinese_Singaporeans).
 The history of the dish is roughly as follows:
 
-* Antiquity: People in [Hainan](https://en.wikipedia.org/wiki/Hainan) develop [Wenchang Chicken](https://en.wikipedia.org/wiki/Wenchang_chicken), where a small chicken is poached in near-boiling water and then served with ginger and garlic.
-* 17th century: During the [Qing consequest of Ming](https://en.wikipedia.org/wiki/Transition_from_Ming_to_Qing), Hainanese emigrants arrive in Singapore and adapt Wenchang Chicken to become Hainanese Chicken Rice. One main difference is the cooking of rice in chicken broth and fat.
-* 18th century: Chicken rice spreads to Thailand and Malaysia from both the south (Singapore) and the north (China). In Thailand, it is called _Khao Mun Gai_ (ข้าวมันไก่).
-* Unknown: Malaysian chicken rice chefs shape the rice into balls, supposedly to keep the rice warm.
-* 19th century: Cantonese migrants arrive in Singapore, bringing influences of [White Cut Chicken](https://en.wikipedia.org/wiki/White_cut_chicken), such as using younger, more tender birds and immersing the chicken in and ice water bath after poaching.
-* 20th century: Singaporean chicken rice chefs debone the chicken prior to serving.
+- Antiquity: People in [Hainan](https://en.wikipedia.org/wiki/Hainan) develop [Wenchang Chicken](https://en.wikipedia.org/wiki/Wenchang_chicken), where a small chicken is poached in near-boiling water and then served with ginger and garlic.
+- 17th century: During the [Qing consequest of Ming](https://en.wikipedia.org/wiki/Transition_from_Ming_to_Qing), Hainanese emigrants arrive in Singapore and adapt Wenchang Chicken to become Hainanese Chicken Rice. One main difference is the cooking of rice in chicken broth and fat.
+- 18th century: Chicken rice spreads to Thailand and Malaysia from both the south (Singapore) and the north (China). In Thailand, it is called _Khao Mun Gai_ (ข้าวมันไก่).
+- Unknown: Malaysian chicken rice chefs shape the rice into balls, supposedly to keep the rice warm.
+- 19th century: Cantonese migrants arrive in Singapore, bringing influences of [White Cut Chicken](https://en.wikipedia.org/wiki/White_cut_chicken), such as using younger, more tender birds and immersing the chicken in and ice water bath after poaching.
+- 20th century: Singaporean chicken rice chefs debone the chicken prior to serving.
 
 # Rough recipe
 
 The ingredients of chicken rice are:
 
-* Whole free range chicken, small to medium size preferred.
-* Ginger.
-* Garlic.
-* Green onions.
-* Medium-long grain fragrant rice such as Jasmine rice.
-* Salt.
-* Light soy sauce.
-* Dark soy sauce.
-* Chili peppers.
-* Cucumber.
+- Whole free range chicken, small to medium size preferred.
+- Ginger.
+- Garlic.
+- Green onions.
+- Medium-long grain fragrant rice such as Jasmine rice.
+- Salt.
+- Light soy sauce.
+- Dark soy sauce.
+- Chili peppers.
+- Cucumber.
 
 To make chicken rice, the steps are roughly as follows:
 
@@ -66,9 +66,9 @@ The rice is ideally served warm.
 
 Three sauces should accompany the chicken rice -- a dark soy sauce, a chili sauce, and a ginger scallion sauce.
 
-* The dark soy sauce should be savoury, slightly sweet, and viscous.
-* The chili sauce should mostly consist of finely chopped red chili peppers and minced garlic, and be fiercely spicy.
-* There may also be a ginger scallion sauce, consisting of grated ginger, chopped scallions, and minced garlic in oil.
+- The dark soy sauce should be savoury, slightly sweet, and viscous.
+- The chili sauce should mostly consist of finely chopped red chili peppers and minced garlic, and be fiercely spicy.
+- There may also be a ginger scallion sauce, consisting of grated ginger, chopped scallions, and minced garlic in oil.
 
 The chicken itself may be drizzled by a light soy sauce.
 
@@ -79,13 +79,15 @@ The cucumber may have been poached in chicken broth and contain the faint taste 
 The chicken rice may be garnished by some green onions.
 
 | Score | Meaning |
+| --- | --- |
 | 0 -- 1 | Item has been omitted or is of such poor quality that I would not eat it if given to me. |
 | 2 -- 3 | Item is barely edible. I wouldn't mind eating this if it were free. |
 | 4 -- 5 | Item is of average quality. I wouldn't mind eating this if it were a little cheaper. |
 | 6 -- 7 | Item is slightly better than average. I wouldn't mind eating this at its given price. |
 | 8 -- 9 | Item is good. I would recommend this restaurant to my friends. |
 | 10 | Exceptional quality. Worth a trip just to eat this. |
-Summary of scoring criteria
+
+Table: Summary of scoring criteria
 
 # Chicken rice in San Francisco
 
@@ -94,7 +96,7 @@ Summary of scoring criteria
 [Crepe and Curry](http://www.crepecurrysf.com/) is a small establishment on the Embarcadero in San Francisco.
 On the main entrance they advertise a \$10.50 chicken rice, although the restaurant is focused on crepes.
 
-pic https://pics.dllu.net/file/dllu-pics/2019-01-12-12-55-01_DSCF1097_20e20e4d8253a5d5c6a6501bf52e2445945e0bd1_3840.jpg : Crepe and Curry's chicken rice
+![Crepe and Curry's chicken rice](https://pics.dllu.net/file/dllu-pics/2019-01-12-12-55-01_DSCF1097_20e20e4d8253a5d5c6a6501bf52e2445945e0bd1_3840.jpg)
 
 ### Chicken
 
@@ -136,7 +138,7 @@ Ordering is only possible by direct message on Instagram.
 
 > CHICKEN RICE \$18: Poached chicken, Rice, Cucumber, Bok choy, chili sauce
 
-pic https://pics.dllu.net/file/dllu-pics/2020-05-29-18-17-47_DSCF5250_adec3569ef61415da569075c8d18157b9f6790ee.jpg : Chicken rice by [@dabaosingapore](https://www.instagram.com/dabaosingapore/)
+![Chicken rice by [@dabaosingapore](https://www.instagram.com/dabaosingapore/)](https://pics.dllu.net/file/dllu-pics/2020-05-29-18-17-47_DSCF5250_adec3569ef61415da569075c8d18157b9f6790ee.jpg)
 
 ### Chicken
 
@@ -185,7 +187,7 @@ The \$10.95 "Original Gai" is the primary dish.
 
 > At Gai we serve classic slow poached chicken.  A clean and comforting meal. Each dish includes poached chicken, fragrant chicken rice, and rich chicken soup along with a selection of our chicken rice sauces highlighting unique flavors of Singapore, Thailand, and Vietnam.
 
-pic https://pics.dllu.net/file/dllu-pics/20190219_140425.jpg GAI : GAI chicken rice with the ginger scallion sauce
+![GAI chicken rice with the ginger scallion sauce](https://pics.dllu.net/file/dllu-pics/20190219_140425.jpg)
 
 ### Chicken
 
@@ -210,9 +212,9 @@ Score: **6/10**
 
 There is a choice of three sauces:
 
-* Ginger scallion
-* Thai-style soy sauce
-* Vietnam-style sugar sauce
+- Ginger scallion
+- Thai-style soy sauce
+- Vietnam-style sugar sauce
 
 You only get to pick one, and extra sauces cost a dollar more.
 Obviously, the ginger scallion sauce is the way to go.
@@ -247,7 +249,7 @@ They peddle a \$15.00 "Frangrant [sic] Chicken & Rice", described on the menu th
 
 > Khao Mun Gai --- Hainanese style chicken & rice made the Hawker Fare way. Poached chicken thigh served with a ginger & fermented bean sauce, with cucumbers & cilantro over chicken fat rice. A hugely popular one dish meal found at most street vendors & shophouses, every vendor & household has their own original recipe, ours is no different in spirit & celebrates a classic.
 
-pic https://pics.dllu.net/file/dllu-pics/IMG_20170326_180934_02.jpg Hawker Fare : Hawker Fare "Chicken and Rice"
+![Hawker Fare "Chicken and Rice"](https://pics.dllu.net/file/dllu-pics/IMG_20170326_180934_02.jpg)
 
 ### Chicken
 
@@ -294,7 +296,7 @@ For lunch, they serve the \$19 _Khao Mun Gai_, described thus:
 
 > Chicken fat rice (yes, that's what we said), ginger-poached chicken, Pim's secret sauce, served with a cup of chicken broth
 
-pic https://pics.dllu.net/file/dllu-pics/2018-07-22-20-50-03_DSC06143_3b77913bba4bc9f654d2a88e83c8341e84dddee4.jpg : Kin Khao
+![Kin Khao](https://pics.dllu.net/file/dllu-pics/2018-07-22-20-50-03_DSC06143_3b77913bba4bc9f654d2a88e83c8341e84dddee4.jpg)
 
 ### Chicken
 
@@ -346,7 +348,7 @@ Of these there is the \$13.95 _Kao Mun Kai_, Thai chicken rice, described on the
 Lers Ros has three locations in San Francisco, on Hayes, Larkin, and on 16th.
 Here, I review the [Lers Ros Larkin location](https://www.yelp.com/biz/lers-ros-san-francisco-2).
 
-pic https://pics.dllu.net/file/dllu-pics/2017-02-25-23-34-28_DSC03463_40757751a3433f9fbcc246e0737b06d83b78b971_1200.jpg Lers Ros : Lers Ros' "Kao Mun Kai".
+![Lers Ros' "Kao Mun Kai".](https://pics.dllu.net/file/dllu-pics/2017-02-25-23-34-28_DSC03463_40757751a3433f9fbcc246e0737b06d83b78b971_1200.jpg)
 
 ### Chicken
 
@@ -402,7 +404,7 @@ One of the dishes is the \$14.49 "Hainan Chicken Rice", described on the menu as
 
 > Steamed chicken served with rice cooked in broth and ginger.
 
-pic https://pics.dllu.net/file/dllu-pics/20171115_125444_01.jpg Lime Tree : Lime Tree "Hainan Chicken Rice"
+![Lime Tree "Hainan Chicken Rice"](https://pics.dllu.net/file/dllu-pics/20171115_125444_01.jpg)
 
 ### Chicken
 
@@ -449,7 +451,7 @@ At \$14.49, the chicken rice is a reasonable dish. It has strong Cantonese and M
 > Singapore Chicken Rice 18
 > Poached & oven roasted chicken thighs, chicken broth, ginger infused jasmine rice, cucumber, cilantro, sweet & spicy soy sauce (wf w/o soy sauce)
 
-pic https://pics.dllu.net/file/dllu-pics/2020-02-28-18-27-20_DSCF4955_77d873d729d0f127a390d603fd23d54944ff63be.jpg : Singapore Chicken Rice
+![Singapore Chicken Rice](https://pics.dllu.net/file/dllu-pics/2020-02-28-18-27-20_DSCF4955_77d873d729d0f127a390d603fd23d54944ff63be.jpg)
 
 ### Chicken
 
@@ -496,7 +498,7 @@ Score: **4/10**
 The Lung Shan location is located, as the name suggests, in the Mission district of San Francisco.
 They serve a "Ginger scallion and chicken fat fried rice" for \$12, which appears to be a variation on chicken rice.
 
-pic https://pics.dllu.net/file/dllu-pics/20190301_174305.jpg Mission Chinese : Chicken Fat Rice
+![Chicken Fat Rice](https://pics.dllu.net/file/dllu-pics/20190301_174305.jpg)
 
 ### Chicken
 
@@ -547,7 +549,7 @@ Here, I review the \$11.95 "The Original" chicken rice with default settings (ha
 Rooster and Rice has three locations in San Francisco, on Filbert, 2nd St, and Kearny.
 Here, I review the [Rooster and Rice 2nd St location](https://www.yelp.com/biz/rooster-and-rice-san-francisco-5).
 
-pic https://pics.dllu.net/file/dllu-pics/2017-04-06-19-55-51_DSC04198_61017543996723dce1a7a9f5913bf5373787c439_1200.jpg Rooster and Rice : Rooster and Rice's "The Original".
+![Rooster and Rice's "The Original".](https://pics.dllu.net/file/dllu-pics/2017-04-06-19-55-51_DSC04198_61017543996723dce1a7a9f5913bf5373787c439_1200.jpg)
 
 ### Chicken
 
@@ -615,7 +617,7 @@ On the lower floor there is a takeout booth called [Singapore To Go](http://arch
 
 > Mix and match ideal meal combinations with daily varieties of entree, dim sum and staple offerings along with the must try-Singapore Hainanese Chicken Rice.
 
-pic https://pics.dllu.net/file/dllu-pics/LRG_DSC05300.JPG Singapore To Go : Singapore To Go Hainanese Chicken Rice
+![Singapore To Go Hainanese Chicken Rice](https://pics.dllu.net/file/dllu-pics/LRG_DSC05300.JPG)
 
 ### Chicken
 
@@ -665,7 +667,7 @@ Siam Chicken is a chicken rice stall in the Metreon mall in San Francisco. They 
 
 > Khao Mun Gai khao = rice, Mun = fat Gai = chicken Thai Chicken & Rice is a more high end street vendor dish in Thailand; chicken always served with a bowl of chicken soup, fresh cucumber & a side of unique sauce.
 
-pic https://pics.dllu.net/file/dllu-pics/siam.jpg Siam Chicken : Siam Chicken _Khao Mun Gai_
+![Siam Chicken _Khao Mun Gai_](https://pics.dllu.net/file/dllu-pics/siam.jpg)
 
 ### Chicken
 
@@ -711,7 +713,7 @@ Sunrise Cafe is a cheap Vietnamese restaurant with a bewildering variety of dish
 
 They serve a _Hai Nam Chicken Rice_. Note that _Hai Nam_ is the Vietnamese transliteration of Hainan (海南), where Hainanese chicken rice is named after.
 
-pic https://pics.dllu.net/file/dllu-pics/20180703_114833.jpg Sunrise Cafe : Sunrise Cafe _Hai Nam Chicken Rice_
+![Sunrise Cafe _Hai Nam Chicken Rice_](https://pics.dllu.net/file/dllu-pics/20180703_114833.jpg)
 
 ### Chicken
 
@@ -763,7 +765,7 @@ The C\$11.95 (large: C\$13.95) Hainanese Chicken Rice is described as such:
 
 > A delightful marriage of Chinese tradition and Malaysian complexity, Hainanese Chicken encompasses the art of boneless-chicken cooking with a traditional method involving quality meat selection, a delicate boiling process and complex sauce-making. It is especially enjoyable in the form of Hainanese Chicken Rice.
 
-pic https://pics.dllu.net/file/dllu-pics/2017-12-29-20-28-42_DSC02083_f3ecbe7abce00d6e2ca6b1e7a27bfcaa058216a2_1200.jpg Mamalee : Mamalee Hainanese Chicken Rice
+![Mamalee Hainanese Chicken Rice](https://pics.dllu.net/file/dllu-pics/2017-12-29-20-28-42_DSC02083_f3ecbe7abce00d6e2ca6b1e7a27bfcaa058216a2_1200.jpg)
 
 ### Chicken
 
@@ -811,7 +813,7 @@ The A\$10.80 Hainan Chicken Rice is described on their Facebook page as such:
 
 > Hainan chicken rice plus soup^~^ only \$10.8 for lunch. Yummy!
 
-pic https://pics.dllu.net/file/dllu-pics/20180527_120452.jpg Open Rice : Open Rice Hainan chicken rice
+![Open Rice Hainan chicken rice](https://pics.dllu.net/file/dllu-pics/20180527_120452.jpg)
 
 ### Chicken
 
@@ -853,7 +855,7 @@ We note that in Singapore and Malaysia, chicken rice may be obtained for around 
 Here I try their "Secret Recipe" Hainanese Chicken Rice (秘制海南鸡饭) at Pudong International Airport.
 It costs 55 RMB, which is the cheapest chicken rice in this post, although expensive by Chinese standards.
 
-pic https://pics.dllu.net/file/dllu-pics/20181028_120801_01.jpg  : Hainanese Chicken Rice
+![Hainanese Chicken Rice](https://pics.dllu.net/file/dllu-pics/20181028_120801_01.jpg)
 
 ### Chicken
 

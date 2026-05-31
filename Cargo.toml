@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 regex = "1.5"
 lazy_static = "1"
+markdown = "1.0"
 shell-words = "1.1"
 inkjet = "0.11.1"
 serde = { version = "1", features = ["derive"] }
