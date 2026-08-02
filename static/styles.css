@@ -247,10 +247,13 @@ figure {
     position: relative;
     width: 100%;
 }
-figure img, figure picture {
+figure img, figure picture, figure video {
     display: block;
     margin: 0 auto;
     max-width: 100%;
+}
+figure video {
+    height: auto;
 }
 table img {
     display: inline-block;

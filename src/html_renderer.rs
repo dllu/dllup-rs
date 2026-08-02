@@ -207,9 +207,12 @@ impl HtmlRenderer {
             Block::SectionHeader { level, id, text } => {
                 self.render_section_header(*level, id, text)
             }
-            Block::BlockQuote(elements) => {
-                let content = self.render_inlines(elements);
-                format!("<blockquote>{}</blockquote>\n", content)
+            Block::BlockQuote(blocks) => {
+                let mut content = String::new();
+                for block in blocks {
+                    content.push_str(&self.render_block(block));
+                }
+                format!("<blockquote>\n{}</blockquote>\n", content)
             }
             Block::ImageFigure {
                 url,
@@ -399,6 +402,10 @@ impl HtmlRenderer {
             .unwrap_or_else(|| format!("fig{}", fig_id_num));
 
         let caption_html = self.render_inlines(text);
+        if is_video_url(url) {
+            return self.render_video_figure(url, &fig_id_attr, fig_id_num, alt, &caption_html);
+        }
+
         match self.image_processor.process(url, &self.asset_root) {
             Ok(processed) if processed.original.is_some() || !processed.variants.is_empty() => self
                 .render_processed_figure(processed, &fig_id_attr, fig_id_num, alt, &caption_html),
@@ -626,6 +633,41 @@ impl HtmlRenderer {
             };
             figure.push_str(&format!("<li><a href=\"{}\">{}</a></li>", entry.url, label));
         }
+        figure.push_str("</ul></nav></details>");
+        figure.push_str("</figcaption></figure>\n");
+        figure
+    }
+
+    fn render_video_figure(
+        &self,
+        url: &str,
+        fig_id_attr: &str,
+        fig_id_num: usize,
+        alt: &str,
+        caption_html: &str,
+    ) -> String {
+        let href = self.escape_url(url);
+        let aria_label = if alt.trim().is_empty() {
+            String::new()
+        } else {
+            format!(" aria-label=\"{}\"", html_escape_attr(alt.trim()))
+        };
+
+        let mut figure = String::new();
+        figure.push_str(&format!("<figure id=\"{}\">", fig_id_attr));
+        figure.push_str(&format!(
+            "<video src=\"{}\" autoplay controls muted playsinline preload=\"metadata\"{}></video>",
+            href, aria_label
+        ));
+        figure.push_str("<figcaption>");
+        figure.push_str(&format!(
+            "<p><a href=\"#{}\" class=\"fignum\">FIGURE {}</a> {}</p>",
+            fig_id_attr, fig_id_num, caption_html
+        ));
+        figure.push_str(
+            "<details><summary>Download</summary><nav aria-label=\"Download sizes\"><ul>",
+        );
+        figure.push_str(&format!("<li><a href=\"{}\">original</a></li>", href));
         figure.push_str("</ul></nav></details>");
         figure.push_str("</figcaption></figure>\n");
         figure
@@ -872,6 +914,17 @@ fn is_page_anchor_reference_url(url: &str) -> bool {
         && fragment
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | ':'))
+}
+
+fn is_video_url(url: &str) -> bool {
+    let path = url.split(['?', '#']).next().unwrap_or(url);
+    let Some(extension) = Path::new(path).extension().and_then(|ext| ext.to_str()) else {
+        return false;
+    };
+    matches!(
+        extension.to_ascii_lowercase().as_str(),
+        "mp4" | "webm" | "ogv" | "ogg" | "mov" | "m4v"
+    )
 }
 
 fn html_fragment_text(input: &str) -> String {
@@ -1480,6 +1533,27 @@ mod tests {
     }
 
     #[test]
+    fn render_video_figure_from_markdown_image_syntax() {
+        let mut parser = crate::parser::Parser::default();
+        parser.parse("---\ntitle: Video Demo\n---\n\n![Caption _text_](clip.MP4?start=1)\n");
+
+        let mut renderer = HtmlRenderer::new(&crate::config::Config::default());
+        let html = renderer.render(&parser.article);
+
+        assert!(html.contains("<video src=\"clip.MP4?start=1\""));
+        assert!(html.contains("autoplay"));
+        assert!(html.contains("controls"));
+        assert!(html.contains("muted"));
+        assert!(html.contains("playsinline"));
+        assert!(html.contains("aria-label=\"Caption text\""));
+        assert!(html.contains("<em>text</em>"));
+        assert!(html.contains("FIGURE 1"));
+        assert!(html.contains("<li><a href=\"clip.MP4?start=1\">original</a></li>"));
+        assert!(!html.contains("<img"));
+        assert!(!html.contains("srcset=\""));
+    }
+
+    #[test]
     fn render_numbered_headings() {
         let mut parser = crate::parser::Parser::default();
         parser.parse("---\ntitle: Title\n---\n\n# Intro\n\n## Details\n");
@@ -1498,6 +1572,22 @@ mod tests {
         let mut renderer = HtmlRenderer::new(&crate::config::Config::default());
         let html = renderer.render(&parser.article);
         assert!(html.contains("<cite class=\"refname\" id=\"eade\">eade</cite> Eade."));
+    }
+
+    #[test]
+    fn blockquote_preserves_paragraphs_and_lists() {
+        let mut parser = crate::parser::Parser::default();
+        parser.parse(
+            "> Opening paragraph.\n>\n> 1. First step\n> 2. Second step\n>\n> - One caveat\n> - Another caveat\n>\n> Closing paragraph.\n",
+        );
+        let mut renderer = renderer_with_config(crate::config::Config::default());
+
+        let html = renderer.render(&parser.article);
+
+        assert_eq!(
+            html,
+            "<blockquote>\n<p>Opening paragraph.</p>\n<ol><li>First step</li><li>Second step</li></ol>\n<ul><li>One caveat</li><li>Another caveat</li></ul>\n<p>Closing paragraph.</p>\n</blockquote>\n"
+        );
     }
 
     #[test]

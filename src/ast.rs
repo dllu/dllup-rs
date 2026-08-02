@@ -23,7 +23,7 @@ pub enum Block {
         id: String,
         text: String,
     },
-    BlockQuote(Vec<InlineElement>),
+    BlockQuote(Vec<Block>),
     ImageFigure {
         url: String,
         id: Option<String>,

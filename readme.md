@@ -30,11 +30,12 @@ conventions:
   ---
   ```
 
-* Image-only paragraphs become captioned figures. The image label is used as
-  both the alt text and visible caption:
+* Image- or video-only paragraphs become captioned figures. The image label is
+  used as the visible caption, and as alt text for images:
 
   ```md
   ![Purple Puppy driving a Porsche 356A Speedster](porsche.svg)
+  ![A short demonstration clip](demo.mp4)
   ```
 
 * GitHub-flavored Markdown tables can be followed by a separate `Table:`

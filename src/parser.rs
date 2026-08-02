@@ -74,9 +74,9 @@ impl Parser {
                         .push(self.section_header_block(heading.depth as usize, &heading.children));
                 }
                 mdast::Node::Blockquote(blockquote) => {
-                    blocks.push(Block::BlockQuote(Self::block_children_to_inlines(
-                        &blockquote.children,
-                    )));
+                    blocks.push(Block::BlockQuote(
+                        self.parse_blocks(&blockquote.children, source),
+                    ));
                 }
                 mdast::Node::List(list) => blocks.push(self.list_block(list)),
                 mdast::Node::Table(table) => {
@@ -212,32 +212,6 @@ impl Parser {
         } else {
             Some(images)
         }
-    }
-
-    fn block_children_to_inlines(children: &[mdast::Node]) -> Vec<InlineElement> {
-        let mut elements = Vec::new();
-        for child in children {
-            if !elements.is_empty() {
-                elements.push(InlineElement::Text("\n".to_string()));
-            }
-            match child {
-                mdast::Node::Paragraph(paragraph) => {
-                    elements.extend(Self::inlines_from_mdast(&paragraph.children));
-                }
-                mdast::Node::Heading(heading) => {
-                    elements.extend(Self::inlines_from_mdast(&heading.children));
-                }
-                mdast::Node::List(list) => {
-                    let mut items = Vec::new();
-                    collect_list_items(list, 1, &mut items);
-                    for item in items {
-                        elements.extend(item.text);
-                    }
-                }
-                node => elements.extend(Self::parse_inline_markdown(&node.to_string())),
-            }
-        }
-        elements
     }
 
     fn parse_inline_markdown(s: &str) -> Vec<InlineElement> {
